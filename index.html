@@ -544,8 +544,8 @@ function renderProjects(){const ps=byKind('project');
     return list.length?`<section class="group"><h2>${l} <span class="count">${list.length}</span></h2><div class="cards">${list.map(projectCard).join('')}</div></section>`:''}).join('')}
 
 function linkRow(l){const u=safeUrl(l.url);
-  return`<div class="row ${l.read?'done':''}"><button type="button" class="main" data-act="edit" data-id="${l.id}">${u&&l.title?`<div class="domain">${esc(domain(u))}</div>`:''}<div class="t">${l.title?esc(l.title):titling.has(l.id)?'<span class="muted">✦ Naming…</span>':esc(domain(u)||'Untitled link')}</div>${l.body?`<div class="sub">${esc(l.body)}</div>`:''}${l.remind?`<div class="meta">${remPill(l)}</div>`:''}</button>
-  ${u?`<a class="out" href="${esc(u)}" target="_blank" rel="noopener">Open ↗</a>`:''}<button type="button" class="iconbtn ${l.read?'on':''}" data-act="read" data-id="${l.id}" aria-label="${l.read?'Undo '+LL(l)[3].toLowerCase():LL(l)[4]}">${l.read?LL(l)[3]:LL(l)[4]}</button></div>`}
+  return`<div class="row ${l.read?'done':''}"><button type="button" class="main" data-act="edit" data-id="${l.id}">${u&&l.title&&listOf(l)==='link'?`<div class="domain">${esc(domain(u))}</div>`:''}<div class="t">${l.title?esc(l.title):titling.has(l.id)?'<span class="muted">✦ Naming…</span>':esc(domain(u)||'Untitled link')}</div>${l.body?`<div class="sub">${esc(l.body)}</div>`:''}${l.remind?`<div class="meta">${remPill(l)}</div>`:''}</button>
+  ${u?`<a class="out" href="${esc(u)}" target="_blank" rel="noopener">${listOf(l)==='link'?'Open':/justwatch\./.test(u)?'Watch':/goodreads\./.test(u)?'Goodreads':'Open'} ↗</a>`:''}<button type="button" class="iconbtn ${l.read?'on':''}" data-act="read" data-id="${l.id}" aria-label="${l.read?'Undo '+LL(l)[3].toLowerCase():LL(l)[4]}">${l.read?LL(l)[3]:LL(l)[4]}</button></div>`}
 function renderLinks(){const L=LISTS.find(x=>x[0]===S.linkList)||LISTS[0];const links=byKind('link');
   const mine=links.filter(l=>listOf(l)===L[0]).sort((a,b)=>(b.created||0)-(a.created||0));
   let h=`<div class="seg">${LISTS.map(([k,lab])=>{const n=links.filter(l=>listOf(l)===k&&!l.read).length;
