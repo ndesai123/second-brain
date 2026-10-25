@@ -369,7 +369,7 @@ function syncChrome(){$('capture').hidden=S.tab==='ask'&&!S.q;$('askForm').hidde
 
 $('tabs').addEventListener('click',e=>{const b=e.target.closest('[data-tab]');if(!b)return;
   S.tab=b.dataset.tab;S.q='';$('q').value='';try{localStorage.setItem('sb-tab',S.tab)}catch(e){}
-  renderCapture();syncChrome();render();window.scrollTo(0,0);
+  renderCapture();syncChrome();render();window.scrollTo(0,0);if(S.tab==='link')backfillTitles();
   if(finePointer())(S.tab==='ask'&&aiOn()?$('askIn'):$('cap')).focus({preventScroll:true})});
 $('capExtra').addEventListener('click',e=>{if(e.target.id!=='smartTog')return;S.smart=!S.smart;
   try{localStorage.setItem('sb-smart',S.smart?'1':'0')}catch(e){}renderCapture();$('cap').focus()});
@@ -387,7 +387,8 @@ $('capture').addEventListener('submit',async e=>{e.preventDefault();
     case'work':d={kind:'work',title:text,tag:($('capTag')||{}).value||'Idea',body:'',pinned:false};break}
   d.created=now;d.updated=now;
   $('cap').value='';if($('capDue'))$('capDue').value='';
-  const ok=await write(()=>col.add(d),S.tab==='today'?'Added to Tasks':'');
+  let ref=null;const ok=await write(async()=>{ref=await col.add(d)},S.tab==='today'?'Added to Tasks':'');
+  if(ok&&ref&&d.kind==='link'&&!d.title&&d.url)autoTitle(ref.id,d.url);
   if(!ok)$('cap').value=text;
   if(ok&&k==='note')setTimeout(()=>{const n=S.items.find(i=>i.kind==='note'&&i.created===now);if(n)openSheet(n.id)},250);
 });
@@ -403,7 +404,7 @@ Sections:
 - task: something to do. Give "due" (YYYY-MM-DD) only if a day is stated or clearly implied; resolve words like "tomorrow", "Fri", "next Tuesday" against today.
 - note: an idea, fact or anything to keep as text.
 - project: a multi-step goal or project.
-- link: a URL to read later. Put the URL in "url"; title may be empty.
+- link: a URL to read later. Put the URL in "url" and always give a short, human title (max 8 words) inferred from the URL's own words and what you know of the site; don't invent specifics the URL doesn't suggest.
 - work: a thought about the person's job (code, tests, the team, meetings, a manager) that is not a dated to-do. Give "tag": one of Idea, Follow-up, Reference, Question.
 Any entry can also get "remind" (YYYY-MM-DD) when the person wants to be reminded or not forget something ("remind me Friday", "don't let me forget on the 30th"). For a deadline like "do X by Friday", set "due" to that day and "remind" to the day before (or today, if the day before has passed). Things to remember with no action go in note.
 Existing projects (set "project" to the id when a task clearly belongs to one; otherwise ""): ${JSON.stringify(projects)}
@@ -447,9 +448,9 @@ $('pending').addEventListener('change',e=>{const s=e.target.closest('.kindsel');
 $('pending').addEventListener('click',async e=>{const d=e.target.closest('[data-drop]');
   if(d){S.pending.splice(+d.dataset.drop,1);return renderPending()}
   if(e.target.id==='pCancel'){S.pending=null;return renderPending()}
-  if(e.target.id==='pAdd'){const L=S.pending;const now=Date.now();
-    const ok=await write(async()=>{for(let i=0;i<L.length;i++){const p=L[i];if(p.action==='update')await col.doc(p.id).update({...p.changes,updated:now});else await col.add(toDoc(p,now+i))}},'Saved');
-    if(ok){S.pending=null;renderPending()}}});
+  if(e.target.id==='pAdd'){const L=S.pending;const now=Date.now();const later=[];
+    const ok=await write(async()=>{for(let i=0;i<L.length;i++){const p=L[i];if(p.action==='update')await col.doc(p.id).update({...p.changes,updated:now});else{const ref=await col.add(toDoc(p,now+i));if(p.kind==='link'&&!p.title&&p.url)later.push([ref.id,p.url])}}},'Saved');
+    if(ok){S.pending=null;renderPending();later.forEach(([i,u])=>autoTitle(i,u))}}});
 
 $('q').addEventListener('input',e=>{S.q=e.target.value.trim();syncChrome();render()});
 
@@ -527,7 +528,7 @@ function renderProjects(){const ps=byKind('project');
     return list.length?`<section class="group"><h2>${l} <span class="count">${list.length}</span></h2><div class="cards">${list.map(projectCard).join('')}</div></section>`:''}).join('')}
 
 function linkRow(l){const u=safeUrl(l.url);
-  return`<div class="row ${l.read?'done':''}"><button type="button" class="main" data-act="edit" data-id="${l.id}">${u?`<div class="domain">${esc(domain(u))}</div>`:''}<div class="t">${esc(l.title||domain(u)||'Untitled link')}</div>${l.body?`<div class="sub">${esc(l.body)}</div>`:''}${l.remind?`<div class="meta">${remPill(l)}</div>`:''}</button>
+  return`<div class="row ${l.read?'done':''}"><button type="button" class="main" data-act="edit" data-id="${l.id}">${u&&l.title?`<div class="domain">${esc(domain(u))}</div>`:''}<div class="t">${l.title?esc(l.title):titling.has(l.id)?'<span class="muted">✦ Naming…</span>':esc(domain(u)||'Untitled link')}</div>${l.body?`<div class="sub">${esc(l.body)}</div>`:''}${l.remind?`<div class="meta">${remPill(l)}</div>`:''}</button>
   ${u?`<a class="out" href="${esc(u)}" target="_blank" rel="noopener">Open ↗</a>`:''}<button type="button" class="iconbtn ${l.read?'on':''}" data-act="read" data-id="${l.id}" aria-label="${l.read?'Mark unread':'Mark read'}">${l.read?'Read':'Mark read'}</button></div>`}
 function renderLinks(){const all=byKind('link').sort((a,b)=>(b.created||0)-(a.created||0));
   let h=`<div class="filters">${[['unread','To read'],['read','Read'],['all','All']].map(([v,l])=>`<button type="button" class="chip" data-act="lview" data-v="${v}" aria-pressed="${S.linkView===v}">${l}</button>`).join('')}</div>`;
@@ -545,6 +546,17 @@ function renderWork(){const all=byKind('work');
   const rest=list.filter(w=>!w.pinned).sort((a,b)=>(b.created||0)-(a.created||0));
   return h+group('Pinned',pin.map(workRow))+group(pin.length?'Everything else':'Latest',rest.map(workRow))}
 
+/* ---------- link titles ---------- */
+const titling=new Set();
+async function autoTitle(id,url){if(!aiOn()||!safeUrl(url)||titling.has(id))return;const cur=get(id);if(cur&&cur.title)return;
+  titling.add(id);render();
+  try{const r=await S.ai.json(`Give a short, human title (max 8 words) for a saved link, inferred from the URL's own words and anything you know about the site. Don't invent specifics the URL doesn't suggest.\nURL: ${url}\nReply with only JSON: {"title":"..."}`,{modelTier:'quick'});
+    const t=String(r&&r.title||'').trim().slice(0,120);const now=get(id);
+    if(t&&(!now||!now.title))await col.doc(id).update({title:t,updated:Date.now()})}
+  catch(e){if(OFF.includes(e&&e.code))aiFail(e)}
+  finally{titling.delete(id);render()}}
+function backfillTitles(){byKind('link').filter(l=>!l.title&&safeUrl(l.url)).slice(0,5).forEach(l=>autoTitle(l.id,l.url))}
+
 /* ---------- ask ---------- */
 function renderAsk(){
   if(!S.ai)return empty('Ask needs Claude','Open this page in the Claude app or on claude.ai to ask questions about what you’ve saved.');
@@ -560,7 +572,7 @@ function makeTools(msg){return[
   {name:'add_item',description:'Create a new item in the second brain. Returns its id.',
    inputSchema:{type:'object',properties:{kind:{type:'string',enum:Object.keys(KINDS)},title:{type:'string'},due:{type:'string',description:'YYYY-MM-DD, tasks only'},remind:{type:'string',description:'YYYY-MM-DD day to remind her, any kind'},body:{type:'string'},tag:{type:'string',enum:TAGS,description:'work items only'},url:{type:'string',description:'links only'},project:{type:'string',description:'id of an existing project, tasks only'}},required:['kind','title']},
    execute:async inp=>{const o=clean(inp);if(!o)throw new Error('An item needs a title or URL');
-     try{const ref=await col.add(toDoc(o,Date.now()));msg.acts.push('Added “'+(o.title||domain(o.url))+'”');chatRefresh();return{id:ref.id}}catch(e){throw new Error(errMsg(e))}}},
+     try{const ref=await col.add(toDoc(o,Date.now()));if(o.kind==='link'&&!o.title&&o.url)autoTitle(ref.id,o.url);msg.acts.push('Added “'+(o.title||domain(o.url))+'”');chatRefresh();return{id:ref.id}}catch(e){throw new Error(errMsg(e))}}},
   {name:'update_item',description:'Change fields on one existing item by its id: title, body, due (YYYY-MM-DD, or "" to clear), remind (YYYY-MM-DD reminder day, or "" to clear), done, status (active/someday/done), tag, pinned, read, project (a project id or ""). Cannot delete.',
    inputSchema:{type:'object',properties:{id:{type:'string'},title:{type:'string'},body:{type:'string'},due:{type:'string'},remind:{type:'string'},done:{type:'boolean'},status:{type:'string',enum:['active','someday','done']},tag:{type:'string',enum:TAGS},pinned:{type:'boolean'},read:{type:'boolean'},project:{type:'string'}},required:['id']},
    execute:async inp=>{const it=get(String(inp.id));if(!it)throw new Error('No item has that id');const u=cleanChanges(inp);u.updated=Date.now();
