@@ -162,6 +162,13 @@ input[type=date]::-webkit-date-and-time-value{text-align:left}
 .actions .right{display:flex;gap:8px}
 
 .toast{position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:999px;font-size:.88rem;z-index:30;max-width:calc(100% - 32px)}
+.hint{flex:1 1 100%;margin:0;font-size:.82rem;color:var(--muted);overflow-wrap:anywhere}
+.hint b{color:var(--ink);font-weight:700}
+.aibox{display:flex;gap:8px;align-items:center}
+.aibox input{flex:1;min-width:0}
+.field .changed{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.field.ai label{color:var(--accent)}
+@media (max-width:560px){.capture input[type=text]{flex:1 1 100%}.capture .btn{flex:1 1 auto}}
 /* iOS zooms into any field under 16px; keep every field at 16px on touch screens */
 @media (pointer:coarse){input,select,textarea{font-size:16px!important}}
 @media (prefers-reduced-motion:no-preference){.sheet{animation:up .18s ease-out}@keyframes up{from{transform:translateY(16px);opacity:.6}}}
@@ -184,6 +191,7 @@ input[type=date]::-webkit-date-and-time-value{text-align:left}
     <input type="text" id="cap" aria-label="Capture">
     <span id="capExtra" style="display:contents"></span>
     <button class="btn" type="submit" id="addBtn">Add</button>
+    <p class="hint" id="capHint" hidden></p>
   </form>
   <div class="pending" id="pending" hidden></div>
   <div class="quickrecent" id="quickRecent" hidden></div>
@@ -570,7 +578,11 @@ function renderQuick(){const Q=$('quickRecent');if(!S.quick){Q.hidden=true;retur
   Q.hidden=!rec.length;
   Q.innerHTML=rec.length?group('Just added',rec.map(i=>{const m=(i.due?`<span class="pill">${esc(fmtDue(i.due))}</span>`:'')+remPill(i);
     return`<div class="row"><button type="button" class="main" data-qedit="${i.id}"><div class="domain">${esc(KINDS[i.kind]?KINDS[i.kind].one:'Item')}</div><div class="t">${esc(i.title||domain(i.url)||'Untitled')}</div>${m?`<div class="meta">${m}</div>`:''}</button></div>`})):''}
-function render(){renderTabs();renderQuick();
+function renderHint(){const H=$('capHint');if(!(aiOn()&&S.smart)){H.hidden=true;return}
+  const open=byKind('task').filter(t=>!t.done).sort(sortDue);const a=open[0],b=open[1];
+  H.innerHTML=a?`Type to add, or to change what’s saved. Try <b>“done with ${esc(a.title)}”</b>${b?` or <b>“move ${esc(b.title)} to Friday”</b>`:''}.`:'Type anything. Try <b>“dentist Tuesday 3pm, read nytimes.com/…”</b>.';
+  H.hidden=false}
+function render(){renderTabs();renderQuick();renderHint();
   $('banner').hidden=!S.items.some(i=>i.example);
   const L=$('list');
   if(S.err==='offline'){L.innerHTML=empty('Open this page in Claude','Your second brain saves to your Claude account, so it only works inside the Claude app or claude.ai.');return}
@@ -601,6 +613,7 @@ $('clearEx').addEventListener('click',async()=>{const ex=S.items.filter(i=>i.exa
 function f(label,html,cls=''){return`<div class="field ${cls}"><label>${label}</label>${html}</div>`}
 function openSheet(id){const it=get(id);if(!it)return;S.editing=id;S.confirmDel=false;
   const k=it.kind;let h=`<h3>Edit ${KINDS[k].one.toLowerCase()}</h3>`;
+  if(aiOn())h+=`<div class="field ai"><label for="e_ai">✦ Change with Claude</label><div class="aibox"><input id="e_ai" placeholder="e.g. due Friday, remind me Thursday" autocomplete="off"><button type="button" class="btn sm" id="e_aiGo">Apply</button></div></div>`;
   const title=(lab='Title')=>f(lab,`<input id="e_title" value="${esc(it.title)}">`);
   if(k==='task'){const ps=byKind('project').filter(p=>p.status!=='done'||p.id===it.project);
     h+=title('Task')+`<div class="inline">${f('Due date',`<input type="date" id="e_due" value="${esc(it.due)}">`)}${f('Remind me on',`<input type="date" id="e_remind" value="${esc(it.remind)}">`)}</div>`
@@ -614,10 +627,21 @@ function openSheet(id){const it=get(id);if(!it)return;S.editing=id;S.confirmDel=
   h+=`<div class="actions"><button type="button" class="btn danger" id="e_del">Delete</button><div class="right"><button type="button" class="btn ghost" id="e_cancel">Cancel</button><button type="submit" class="btn">Save</button></div></div>`;
   $('sheet').innerHTML=h;$('scrim').hidden=false;
   if(finePointer())setTimeout(()=>{const el=k==='note'?$('e_body'):$('e_title');el&&el.focus()},30)}
+async function sheetAI(){const it=get(S.editing);const inp=$('e_ai');if(!it||!inp||!inp.value.trim())return;const btn=$('e_aiGo');btn.disabled=true;btn.textContent='Working…';
+  const F=['title','due','remind','body','tag','status','url'];const cur={kind:it.kind};F.forEach(k=>{const el=$('e_'+k);if(el)cur[k]=el.value});
+  const prompt=`Today is ${weekday()}, ${today()}. An item from a personal second brain, as JSON:\n${JSON.stringify(cur)}\nApply this change: """${inp.value.trim().slice(0,2000)}"""\nReply with only a JSON object holding just the fields that change, from: ${Object.keys(cur).filter(k=>k!=='kind').join(', ')}. Dates are YYYY-MM-DD and "" clears one; resolve words like "Friday" or "next week" against today. tag is one of Idea, Follow-up, Reference, Question; status is active, someday or done. For body, return the full new text and keep what's there unless asked to remove it.`;
+  try{const ch=await S.ai.json(prompt,{modelTier:'quick'});let n=0;
+    if(ch&&typeof ch==='object')for(const k of F){const el=$('e_'+k);const v=ch[k];if(!el||typeof v!=='string')continue;
+      if((k==='due'||k==='remind')&&v!==''&&!isDate(v))continue;if(k==='tag'&&!TAGS.includes(v))continue;if(k==='status'&&!STATUSES.some(s=>s[0]===v))continue;
+      if(el.value!==v){el.value=v;el.classList.add('changed');n++}}
+    if(n){inp.value='';toast('Fields updated. Check them, then Save.')}else toast('Nothing to change there. Try saying it another way.')}
+  catch(e){toast(aiFail(e))}finally{btn.disabled=false;btn.textContent='Apply'}}
+$('sheet').addEventListener('keydown',e=>{if(e.target.id==='e_ai'&&e.key==='Enter'&&!e.isComposing){e.preventDefault();sheetAI()}});
 function closeSheet(){$('scrim').hidden=true;S.editing=null}
 $('scrim').addEventListener('click',e=>{if(e.target===$('scrim'))closeSheet()});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('scrim').hidden)closeSheet()});
 $('sheet').addEventListener('click',async e=>{
+  if(e.target.id==='e_aiGo')return sheetAI();
   if(e.target.id==='e_cancel')return closeSheet();
   if(e.target.id==='e_del'){if(!S.confirmDel){S.confirmDel=true;e.target.textContent='Tap again to delete';return}
     const id=S.editing;closeSheet();write(()=>col.doc(id).delete(),'Deleted')}});
