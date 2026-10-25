@@ -137,7 +137,7 @@ main{padding-bottom:32px}
 
 /* library lists */
 .seg{display:flex;gap:3px;background:var(--sunk);border-radius:10px;padding:3px;margin:4px 0 10px}
-.segb{flex:1;min-width:0;border:0;background:none;border-radius:8px;padding:7px 6px;font-weight:700;color:var(--muted);display:flex;gap:6px;justify-content:center;align-items:center}
+.segb{flex:1;min-width:0;border:0;background:none;border-radius:8px;padding:7px 3px;font-weight:700;color:var(--muted);display:flex;gap:5px;justify-content:center;align-items:center}
 .segb[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgb(0 0 0 / .08)}
 
 /* bottom tab bar on phones; top tabs elsewhere */
@@ -238,8 +238,8 @@ const KINDS={
   work:{label:'Work',ph:'Capture a work thought…',one:'Work note'}
 };
 const TABS=[['today','Today'],['task','Tasks'],['note','Notes'],['project','Projects'],['link','Library'],['work','Work'],['ask','Ask']];
-const LISTS=[['link','Links','To read','Read','Mark read','Paste a link to read later…'],['watch','Watch','To watch','Watched','Mark watched','Add a movie, show or video…'],['book','Books','To read','Finished','Mark finished','Add a book…']];
-const listOf=l=>LISTS.some(x=>x[0]===l.list)?l.list:'link';
+const LISTS=[['link','Links','To read','Read','Mark read','Paste a link to read later…'],['movie','Movies','To watch','Watched','Mark watched','Add a movie…'],['show','Shows','To watch','Watched','Mark watched','Add a TV show…'],['book','Books','To read','Finished','Mark finished','Add a book…']];
+const listOf=l=>LISTS.some(x=>x[0]===l.list)?l.list:(l.list==='watch'?'movie':'link');
 const LL=l=>LISTS.find(x=>x[0]===listOf(l));
 const TAGS=['Idea','Follow-up','Reference','Question'];
 const STATUSES=[['active','Active'],['someday','Someday'],['done','Done']];
@@ -250,7 +250,7 @@ let col=null;
 try{const t=localStorage.getItem('sb-tab');if(TABS.some(x=>x[0]===t))S.tab=t}catch(e){}
 try{if(localStorage.getItem('sb-smart')==='0')S.smart=false}catch(e){}
 try{const l=localStorage.getItem('sb-list');if(LISTS.some(x=>x[0]===l))S.linkList=l}catch(e){}
-{const h=(location.hash||'').slice(1);if(TABS.some(x=>x[0]===h))S.tab=h;if(h==='watch'||h==='books'){S.tab='link';S.linkList=h==='books'?'book':'watch'}}
+{const h=(location.hash||'').slice(1);if(TABS.some(x=>x[0]===h))S.tab=h;const HL={watch:'movie',movies:'movie',shows:'show',books:'book'};if(HL[h]){S.tab='link';S.linkList=HL[h]}}
 S.quick=location.hash==='#capture';if(S.quick)S.tab='today';
 
 const $=id=>document.getElementById(id);
@@ -418,7 +418,7 @@ Sections:
 - task: something to do. Give "due" (YYYY-MM-DD) only if a day is stated or clearly implied; resolve words like "tomorrow", "Fri", "next Tuesday" against today.
 - note: an idea, fact or anything to keep as text.
 - project: a multi-step goal or project.
-- link: something to read, watch or look at later. Give "list": "link" (an article or web page to read), "watch" (a movie, show or video to watch) or "book" (a book to read). Put any URL in "url". Always give a short, human title (max 8 words): for a URL, infer it from the URL's own words and what you know of the site, without inventing specifics; for a movie, show or book, use its proper name. For books, put the author in "body" if you know it.
+- link: something to read, watch or look at later. Give "list": "link" (an article or web page to read), "movie" (a movie or film to watch), "show" (a TV show or series to watch) or "book" (a book to read). Put any URL in "url". Always give a short, human title (max 8 words): for a URL, infer it from the URL's own words and what you know of the site, without inventing specifics; for a movie, show or book, use its proper name. For books, put the author in "body" if you know it.
 - work: a thought about the person's job (code, tests, the team, meetings, a manager) that is not a dated to-do. Give "tag": one of Idea, Follow-up, Reference, Question.
 Any entry can also get "remind" (YYYY-MM-DD) when the person wants to be reminded or not forget something ("remind me Friday", "don't let me forget on the 30th"). For a deadline like "do X by Friday", set "due" to that day and "remind" to the day before (or today, if the day before has passed). Things to remember with no action go in note.
 Any entry can have "due" (YYYY-MM-DD) when it has a deadline, not just tasks; work notes, notes and library items with a due date also show in the task list.
@@ -427,7 +427,7 @@ Split the input into separate entries if it holds several things. Keep titles sh
 Already saved (JSON): ${JSON.stringify(existing)}
 If part of the input is about something already saved (finished it, moved it, renamed it, a detail to add, "remind me about X on Monday", "read that article"), output an update for that item instead of a new entry:
 {"action":"update","id":"<id from the saved list>","changes":{only the fields that change},"summary":"short plain description of the change"}
-Changeable fields: title, due, remind, done (tasks), read (links; also means watched or finished on the watch and book lists), list (link/watch/book), status (projects: active/someday/done), tag, pinned, url. Use "" to clear a date. To add a detail, use "append_body" with just the new text. Only update when the match is clear; if unsure, create a new entry.
+Changeable fields: title, due, remind, done (tasks), read (links; also means watched or finished on the watch and book lists), list (link/movie/show/book), status (projects: active/someday/done), tag, pinned, url. Use "" to clear a date. To add a detail, use "append_body" with just the new text. Only update when the match is clear; if unsure, create a new entry.
 New entries use "action":"create".
 Reply with only a JSON array like:
 [{"action":"create","kind":"task","title":"Submit expense report","due":"2026-10-30","remind":"2026-10-29","project":"","body":""},{"action":"update","id":"abc123","changes":{"done":true},"summary":"Mark done"},{"action":"create","kind":"work","title":"Add a dark-mode toggle to settings","tag":"Idea","body":""}]
@@ -456,7 +456,7 @@ function renderPending(){const P=$('pending');const L=S.pending;
   P.innerHTML=`<div class="pendhead"><b>${esc(pendTitle(L))}</b><span class="muted">Check it over, then save.</span></div>
   <div class="rows">${L.map((p,i)=>p.action==='update'?updRow(p,i):`<div class="row"><select class="kindsel" data-i="${i}" aria-label="Section">${Object.keys(KINDS).map(k=>`<option value="${k}" ${k===p.kind?'selected':''}>${KINDS[k].one}</option>`).join('')}</select>
     <div class="main"><div class="t">${esc(p.title||domain(p.url))}</div>${p.body?`<div class="sub">${esc(p.body)}</div>`:''}
-    <div class="meta">${p.due?`<span class="pill ${p.due<today()?'over':p.due===today()?'today':''}">${esc(fmtDue(p.due))}</span>`:''}${p.kind==='task'&&p.project?`<span class="pill acc">${esc(pt(p.project))}</span>`:''}${p.kind==='work'?`<span class="pill acc">${esc(p.tag||'Idea')}</span>`:''}${p.kind==='link'&&p.list&&p.list!=='link'?`<span class="pill acc">${p.list==='watch'?'Watch list':'Book list'}</span>`:''}${p.url?`<span class="pill">${esc(domain(p.url))}</span>`:''}${remPill(p)}</div></div>
+    <div class="meta">${p.due?`<span class="pill ${p.due<today()?'over':p.due===today()?'today':''}">${esc(fmtDue(p.due))}</span>`:''}${p.kind==='task'&&p.project?`<span class="pill acc">${esc(pt(p.project))}</span>`:''}${p.kind==='work'?`<span class="pill acc">${esc(p.tag||'Idea')}</span>`:''}${p.kind==='link'&&p.list&&p.list!=='link'?`<span class="pill acc">${esc((LISTS.find(x=>x[0]===p.list)||LISTS[0])[1])}</span>`:''}${p.url?`<span class="pill">${esc(domain(p.url))}</span>`:''}${remPill(p)}</div></div>
     <button type="button" class="iconbtn" data-drop="${i}" aria-label="Leave this one out">✕</button></div>`).join('')}</div>
   <div class="actions"><button type="button" class="btn ghost sm" id="pCancel">Cancel</button><button type="button" class="btn sm" id="pAdd">${L.some(p=>p.action==='update')?'Save':'Add'} ${L.length>1?'all '+L.length:'it'}</button></div>`}
 $('pending').addEventListener('change',e=>{const s=e.target.closest('.kindsel');if(!s)return;S.pending[+s.dataset.i].kind=s.value;renderPending()});
@@ -552,7 +552,7 @@ function renderLinks(){const L=LISTS.find(x=>x[0]===S.linkList)||LISTS[0];const 
     return`<button type="button" class="segb" data-act="llist" data-v="${k}" aria-pressed="${L[0]===k}">${lab}${n?`<span class="count">${n}</span>`:''}</button>`}).join('')}</div>`;
   h+=`<div class="filters">${[['unread',L[2]],['read',L[3]],['all','All']].map(([v,l])=>`<button type="button" class="chip" data-act="lview" data-v="${v}" aria-pressed="${S.linkView===v}">${l}</button>`).join('')}</div>`;
   const list=mine.filter(l=>S.linkView==='all'||(S.linkView==='read'?l.read:!l.read));
-  const E={link:['Reading list is empty','Paste any link above to save it for later.'],watch:['Watch list is empty','Add a movie, show or video above.'],book:['Book list is empty','Add a book above. Auto-sort fills in the author.']}[L[0]];
+  const E={link:['Reading list is empty','Paste any link above to save it for later.'],movie:['No movies yet','Add a movie above.'],show:['No shows yet','Add a TV show above.'],book:['Book list is empty','Add a book above. Auto-sort fills in the author.']}[L[0]];
   return h+(list.length?`<div class="rows">${list.map(linkRow).join('')}</div>`:empty(S.linkView==='read'?`Nothing ${L[3].toLowerCase()} yet`:E[0],E[1]))}
 
 function workRow(w){return`<div class="row"><button type="button" class="main" data-act="edit" data-id="${w.id}"><div class="t">${esc(w.title)}</div>${w.body?`<div class="sub">${esc(w.body)}</div>`:''}
@@ -590,11 +590,11 @@ function renderAsk(){
 function chatRefresh(){if(S.tab==='ask'&&!S.q){render();window.scrollTo(0,document.body.scrollHeight)}}
 function makeTools(msg){return[
   {name:'add_item',description:'Create a new item in the second brain. Returns its id.',
-   inputSchema:{type:'object',properties:{kind:{type:'string',enum:Object.keys(KINDS)},title:{type:'string'},due:{type:'string',description:'YYYY-MM-DD deadline, any kind (shows in the task list)'},remind:{type:'string',description:'YYYY-MM-DD day to remind her, any kind'},body:{type:'string'},tag:{type:'string',enum:TAGS,description:'work items only'},url:{type:'string',description:'links only'},list:{type:'string',enum:['link','watch','book'],description:'library items only: reading list, watch list or book list'},project:{type:'string',description:'id of an existing project, tasks only'}},required:['kind','title']},
+   inputSchema:{type:'object',properties:{kind:{type:'string',enum:Object.keys(KINDS)},title:{type:'string'},due:{type:'string',description:'YYYY-MM-DD deadline, any kind (shows in the task list)'},remind:{type:'string',description:'YYYY-MM-DD day to remind her, any kind'},body:{type:'string'},tag:{type:'string',enum:TAGS,description:'work items only'},url:{type:'string',description:'links only'},list:{type:'string',enum:['link','movie','show','book'],description:'library items only: reading list, movies, TV shows or books'},project:{type:'string',description:'id of an existing project, tasks only'}},required:['kind','title']},
    execute:async inp=>{const o=clean(inp);if(!o)throw new Error('An item needs a title or URL');
      try{const ref=await col.add(toDoc(o,Date.now()));if(o.kind==='link'&&!o.title&&o.url)autoTitle(ref.id,o.url);msg.acts.push('Added “'+(o.title||domain(o.url))+'”');chatRefresh();return{id:ref.id}}catch(e){throw new Error(errMsg(e))}}},
-  {name:'update_item',description:'Change fields on one existing item by its id: title, body, due (YYYY-MM-DD, or "" to clear), remind (YYYY-MM-DD reminder day, or "" to clear), list (link/watch/book), done, status (active/someday/done), tag, pinned, read, project (a project id or ""). Cannot delete.',
-   inputSchema:{type:'object',properties:{id:{type:'string'},title:{type:'string'},body:{type:'string'},due:{type:'string'},remind:{type:'string'},list:{type:'string',enum:['link','watch','book']},done:{type:'boolean'},status:{type:'string',enum:['active','someday','done']},tag:{type:'string',enum:TAGS},pinned:{type:'boolean'},read:{type:'boolean'},project:{type:'string'}},required:['id']},
+  {name:'update_item',description:'Change fields on one existing item by its id: title, body, due (YYYY-MM-DD, or "" to clear), remind (YYYY-MM-DD reminder day, or "" to clear), list (link/movie/show/book), done, status (active/someday/done), tag, pinned, read, project (a project id or ""). Cannot delete.',
+   inputSchema:{type:'object',properties:{id:{type:'string'},title:{type:'string'},body:{type:'string'},due:{type:'string'},remind:{type:'string'},list:{type:'string',enum:['link','movie','show','book']},done:{type:'boolean'},status:{type:'string',enum:['active','someday','done']},tag:{type:'string',enum:TAGS},pinned:{type:'boolean'},read:{type:'boolean'},project:{type:'string'}},required:['id']},
    execute:async inp=>{const it=get(String(inp.id));if(!it)throw new Error('No item has that id');const u=cleanChanges(inp);u.updated=Date.now();
      try{await col.doc(it.id).update(u)}catch(e){throw new Error(errMsg(e))}
      msg.acts.push('Updated “'+(it.title||domain(it.url))+'”');chatRefresh();return{ok:true}}}]}
