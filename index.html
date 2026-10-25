@@ -334,7 +334,7 @@ function parseAction(x){if(!x||typeof x!=='object')return null;
     if(!Object.keys(u).length)return null;
     return{action:'update',id:it.id,changes:u,summary:String(x.summary||'').slice(0,140)}}
   const o=clean(x);if(o)o.action='create';return o}
-function toDoc(p,now){const b={kind:p.kind,title:p.title||'',body:p.body||'',created:now,updated:now};if(p.remind)b.remind=p.remind;
+function toDoc(p,now){const b={kind:p.kind,title:p.title||'',body:p.body||'',created:now,updated:now};if(p.remind)b.remind=p.remind;if(p.due)b.due=p.due;
   switch(p.kind){case'task':return{...b,due:p.due||'',done:false,project:p.project||''};
     case'project':return{...b,status:'active'};
     case'link':return{...b,url:p.url||'',read:false,list:LISTS.some(x=>x[0]===p.list)?p.list:'link'};
@@ -347,11 +347,13 @@ function brainDump(limit=120000){const rows=S.items.map(i=>{const o={id:i.id,kin
   let s=JSON.stringify(rows);return s.length>limit?s.slice(0,limit)+'…(truncated)':s}
 
 /* ---------- tabs & capture ---------- */
-function remindersDue(){const t=today();return S.items.filter(i=>i.remind&&i.remind<=t&&!(i.kind==='task'&&(i.done||(i.due&&i.due<=t)))&&!(i.kind==='link'&&i.read))}
+const isFinished=i=>!!(i.done||(i.kind==='link'&&i.read)||(i.kind==='project'&&i.status==='done'));
+const actionable=()=>S.items.filter(i=>i.kind==='task'||i.due);
+function remindersDue(){const t=today();return S.items.filter(i=>i.remind&&i.remind<=t&&!isFinished(i)&&!(actionable().includes(i)&&i.due&&i.due<=t))}
 const remPill=i=>i.remind?`<span class="pill ${i.remind<=today()?'today':''}">Remind ${esc(fmtDue(i.remind))}</span>`:'';
 function counts(){const t=today();return{
-  today:byKind('task').filter(i=>!i.done&&i.due&&i.due<=t).length+remindersDue().length,
-  task:byKind('task').filter(i=>!i.done).length,
+  today:actionable().filter(i=>!isFinished(i)&&i.due&&i.due<=t).length+remindersDue().length,
+  task:actionable().filter(i=>!isFinished(i)).length,
   note:byKind('note').length,
   project:byKind('project').filter(i=>(i.status||'active')==='active').length,
   link:byKind('link').filter(i=>!i.read).length,
@@ -419,6 +421,7 @@ Sections:
 - link: something to read, watch or look at later. Give "list": "link" (an article or web page to read), "watch" (a movie, show or video to watch) or "book" (a book to read). Put any URL in "url". Always give a short, human title (max 8 words): for a URL, infer it from the URL's own words and what you know of the site, without inventing specifics; for a movie, show or book, use its proper name. For books, put the author in "body" if you know it.
 - work: a thought about the person's job (code, tests, the team, meetings, a manager) that is not a dated to-do. Give "tag": one of Idea, Follow-up, Reference, Question.
 Any entry can also get "remind" (YYYY-MM-DD) when the person wants to be reminded or not forget something ("remind me Friday", "don't let me forget on the 30th"). For a deadline like "do X by Friday", set "due" to that day and "remind" to the day before (or today, if the day before has passed). Things to remember with no action go in note.
+Any entry can have "due" (YYYY-MM-DD) when it has a deadline, not just tasks; work notes, notes and library items with a due date also show in the task list.
 Existing projects (set "project" to the id when a task clearly belongs to one; otherwise ""): ${JSON.stringify(projects)}
 Split the input into separate entries if it holds several things. Keep titles short and in the person's own words, without dates; put extra detail in "body".
 Already saved (JSON): ${JSON.stringify(existing)}
@@ -453,7 +456,7 @@ function renderPending(){const P=$('pending');const L=S.pending;
   P.innerHTML=`<div class="pendhead"><b>${esc(pendTitle(L))}</b><span class="muted">Check it over, then save.</span></div>
   <div class="rows">${L.map((p,i)=>p.action==='update'?updRow(p,i):`<div class="row"><select class="kindsel" data-i="${i}" aria-label="Section">${Object.keys(KINDS).map(k=>`<option value="${k}" ${k===p.kind?'selected':''}>${KINDS[k].one}</option>`).join('')}</select>
     <div class="main"><div class="t">${esc(p.title||domain(p.url))}</div>${p.body?`<div class="sub">${esc(p.body)}</div>`:''}
-    <div class="meta">${p.kind==='task'&&p.due?`<span class="pill ${p.due<today()?'over':p.due===today()?'today':''}">${esc(fmtDue(p.due))}</span>`:''}${p.kind==='task'&&p.project?`<span class="pill acc">${esc(pt(p.project))}</span>`:''}${p.kind==='work'?`<span class="pill acc">${esc(p.tag||'Idea')}</span>`:''}${p.kind==='link'&&p.list&&p.list!=='link'?`<span class="pill acc">${p.list==='watch'?'Watch list':'Book list'}</span>`:''}${p.url?`<span class="pill">${esc(domain(p.url))}</span>`:''}${remPill(p)}</div></div>
+    <div class="meta">${p.due?`<span class="pill ${p.due<today()?'over':p.due===today()?'today':''}">${esc(fmtDue(p.due))}</span>`:''}${p.kind==='task'&&p.project?`<span class="pill acc">${esc(pt(p.project))}</span>`:''}${p.kind==='work'?`<span class="pill acc">${esc(p.tag||'Idea')}</span>`:''}${p.kind==='link'&&p.list&&p.list!=='link'?`<span class="pill acc">${p.list==='watch'?'Watch list':'Book list'}</span>`:''}${p.url?`<span class="pill">${esc(domain(p.url))}</span>`:''}${remPill(p)}</div></div>
     <button type="button" class="iconbtn" data-drop="${i}" aria-label="Leave this one out">✕</button></div>`).join('')}</div>
   <div class="actions"><button type="button" class="btn ghost sm" id="pCancel">Cancel</button><button type="button" class="btn sm" id="pAdd">${L.some(p=>p.action==='update')?'Save':'Add'} ${L.length>1?'all '+L.length:'it'}</button></div>`}
 $('pending').addEventListener('change',e=>{const s=e.target.closest('.kindsel');if(!s)return;S.pending[+s.dataset.i].kind=s.value;renderPending()});
@@ -471,11 +474,12 @@ const checkSvg='<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg
 function empty(title,hint){return`<div class="empty"><b>${esc(title)}</b>${esc(hint)}</div>`}
 function group(title,rows,cls=''){if(!rows.length)return'';return`<section class="group"><h2 class="${cls}">${esc(title)} <span class="count">${rows.length}</span></h2><div class="rows">${rows.join('')}</div></section>`}
 
-function taskRow(t){const tdy=today();const p=t.project?get(t.project):null;let due='';
-  if(t.due){const cls=t.done?'':t.due<tdy?'over':t.due===tdy?'today':'';due=`<span class="pill ${cls}">${esc(fmtDue(t.due))}</span>`}
-  return`<div class="row ${t.done?'done':''}"><button type="button" class="check" role="checkbox" aria-checked="${!!t.done}" aria-label="Mark done" data-act="toggle" data-id="${t.id}">${t.done?checkSvg:''}</button>
-  <button type="button" class="main" data-act="edit" data-id="${t.id}"><div class="t">${esc(t.title)}</div>${t.body?`<div class="sub">${esc(t.body)}</div>`:''}
-  ${due||p||t.remind?`<div class="meta">${due}${p?`<span class="pill acc">${esc(p.title)}</span>`:''}${remPill(t)}</div>`:''}</button></div>`}
+function taskRow(t){const tdy=today();const p=t.project?get(t.project):null;let due='';const fin=isFinished(t);
+  const origin=t.kind!=='task'?`<span class="pill acc">${esc(t.kind==='link'?LL(t)[1]:KINDS[t.kind].one)}</span>`:'';
+  if(t.due){const cls=fin?'':t.due<tdy?'over':t.due===tdy?'today':'';due=`<span class="pill ${cls}">${esc(fmtDue(t.due))}</span>`}
+  return`<div class="row ${fin?'done':''}"><button type="button" class="check" role="checkbox" aria-checked="${fin}" aria-label="Mark done" data-act="toggle" data-id="${t.id}">${fin?checkSvg:''}</button>
+  <button type="button" class="main" data-act="edit" data-id="${t.id}"><div class="t">${esc(t.title||domain(t.url)||'Untitled')}</div>${t.body?`<div class="sub">${esc(t.body)}</div>`:''}
+  ${due||p||t.remind||origin?`<div class="meta">${origin}${due}${p?`<span class="pill acc">${esc(p.title)}</span>`:''}${remPill(t)}</div>`:''}</button></div>`}
 function remRow(i){return`<div class="row"><button type="button" class="main" data-act="edit" data-id="${i.id}"><div class="domain">${esc(KINDS[i.kind].one)}</div><div class="t">${esc(i.title||domain(i.url)||'Untitled')}</div>${i.body?`<div class="sub">${esc(i.body)}</div>`:''}</button>
   <button type="button" class="iconbtn" data-act="unremind" data-id="${i.id}" aria-label="Dismiss reminder">Got it</button></div>`}
 
@@ -483,7 +487,7 @@ function projectCard(p){const ts=byKind('task').filter(t=>t.project===p.id);cons
   return`<button type="button" class="card" data-act="edit" data-id="${p.id}"><div class="t">${esc(p.title)}</div>${p.body?`<div class="sub">${esc(p.body)}</div>`:''}
   <div class="bar" aria-hidden="true"><i style="width:${pct}%"></i></div><div class="meta"><span class="pill">${ts.length?`${dn} of ${ts.length} tasks done`:'No tasks linked'}</span></div></button>`}
 
-function renderToday(){const open=byKind('task').filter(t=>!t.done);const t=today();
+function renderToday(){const open=actionable().filter(t=>!isFinished(t));const t=today();
   const over=open.filter(x=>x.due&&x.due<t).sort(sortDue),tod=open.filter(x=>x.due===t),soon=open.filter(x=>x.due&&x.due>t&&x.due<=addDays(t,3)).sort(sortDue);
   const pins=byKind('work').filter(w=>w.pinned).sort((a,b)=>(b.updated||0)-(a.updated||0));
   const projs=byKind('project').filter(p=>(p.status||'active')==='active').sort((a,b)=>(b.updated||0)-(a.updated||0));
@@ -500,7 +504,7 @@ function renderToday(){const open=byKind('task').filter(t=>!t.done);const t=toda
   return h}
 
 async function planDay(){if(S.plan.busy)return;S.plan={text:'',busy:true,err:''};render();
-  const t=today();const open=byKind('task').filter(x=>!x.done).sort((a,b)=>(a.due||'9999')<(b.due||'9999')?-1:1).slice(0,80)
+  const t=today();const open=actionable().filter(x=>!isFinished(x)).sort((a,b)=>(a.due||'9999')<(b.due||'9999')?-1:1).slice(0,80)
     .map(x=>({title:x.title,due:x.due||'none',project:x.project&&get(x.project)?get(x.project).title:'',notes:String(x.body||'').slice(0,200)}));
   const pins=byKind('work').filter(w=>w.pinned).map(w=>w.title);
   const projs=byKind('project').filter(p=>(p.status||'active')==='active').map(p=>p.title);
@@ -519,11 +523,11 @@ Active projects: ${JSON.stringify(projs)}`;
   catch(e){S.plan.text=e.text||'';S.plan.err=aiFail(e)}
   S.plan.busy=false;render()}
 
-function renderTasks(){const all=byKind('task');
+function renderTasks(){const all=actionable();
   let h=`<div class="filters"><button type="button" class="chip" data-act="tview" data-v="open" aria-pressed="${S.taskView==='open'}">To do</button><button type="button" class="chip" data-act="tview" data-v="done" aria-pressed="${S.taskView==='done'}">Done</button></div>`;
-  if(S.taskView==='done'){const d=all.filter(t=>t.done).sort((a,b)=>(b.doneAt||0)-(a.doneAt||0)).slice(0,60);
+  if(S.taskView==='done'){const d=all.filter(isFinished).sort((a,b)=>(b.doneAt||0)-(a.doneAt||0)).slice(0,60);
     return h+(d.length?group('Completed',d.map(taskRow)):empty('Nothing finished yet','Tick a task off and it lands here.'))}
-  const open=all.filter(t=>!t.done);const t=today(),wk=addDays(t,7);
+  const open=all.filter(t=>!isFinished(t));const t=today(),wk=addDays(t,7);
   const g={over:[],today:[],week:[],later:[],none:[]};
   open.forEach(x=>{const k=dk(x);if(!k)g.none.push(x);else if(k<t)g.over.push(x);else if(k===t)g.today.push(x);else if(k<=wk)g.week.push(x);else g.later.push(x)});
   if(!open.length)return h+empty('All clear','Add a task above. Give it a date to see it under Today or Next 7 days.');
@@ -586,7 +590,7 @@ function renderAsk(){
 function chatRefresh(){if(S.tab==='ask'&&!S.q){render();window.scrollTo(0,document.body.scrollHeight)}}
 function makeTools(msg){return[
   {name:'add_item',description:'Create a new item in the second brain. Returns its id.',
-   inputSchema:{type:'object',properties:{kind:{type:'string',enum:Object.keys(KINDS)},title:{type:'string'},due:{type:'string',description:'YYYY-MM-DD, tasks only'},remind:{type:'string',description:'YYYY-MM-DD day to remind her, any kind'},body:{type:'string'},tag:{type:'string',enum:TAGS,description:'work items only'},url:{type:'string',description:'links only'},list:{type:'string',enum:['link','watch','book'],description:'library items only: reading list, watch list or book list'},project:{type:'string',description:'id of an existing project, tasks only'}},required:['kind','title']},
+   inputSchema:{type:'object',properties:{kind:{type:'string',enum:Object.keys(KINDS)},title:{type:'string'},due:{type:'string',description:'YYYY-MM-DD deadline, any kind (shows in the task list)'},remind:{type:'string',description:'YYYY-MM-DD day to remind her, any kind'},body:{type:'string'},tag:{type:'string',enum:TAGS,description:'work items only'},url:{type:'string',description:'links only'},list:{type:'string',enum:['link','watch','book'],description:'library items only: reading list, watch list or book list'},project:{type:'string',description:'id of an existing project, tasks only'}},required:['kind','title']},
    execute:async inp=>{const o=clean(inp);if(!o)throw new Error('An item needs a title or URL');
      try{const ref=await col.add(toDoc(o,Date.now()));if(o.kind==='link'&&!o.title&&o.url)autoTitle(ref.id,o.url);msg.acts.push('Added “'+(o.title||domain(o.url))+'”');chatRefresh();return{id:ref.id}}catch(e){throw new Error(errMsg(e))}}},
   {name:'update_item',description:'Change fields on one existing item by its id: title, body, due (YYYY-MM-DD, or "" to clear), remind (YYYY-MM-DD reminder day, or "" to clear), list (link/watch/book), done, status (active/someday/done), tag, pinned, read, project (a project id or ""). Cannot delete.',
@@ -657,7 +661,8 @@ $('list').addEventListener('click',async e=>{const b=e.target.closest('[data-act
   if(act==='clearchat'){S.chat=[];render();if(finePointer())$('askIn').focus();return}
   if(!it)return;const now=Date.now();
   if(act==='unremind')write(()=>col.doc(id).update({remind:'',updated:now}),'Reminder cleared');
-  if(act==='toggle')write(()=>col.doc(id).update({done:!it.done,doneAt:it.done?null:now,updated:now}));
+  if(act==='toggle'){const fin=isFinished(it);const u={done:!fin,doneAt:fin?null:now,updated:now};
+    if(it.kind==='link')u.read=!fin;if(it.kind==='project')u.status=fin?'active':'done';write(()=>col.doc(id).update(u))}
   if(act==='read')write(()=>col.doc(id).update({read:!it.read,updated:now}));
   if(act==='pin')write(()=>col.doc(id).update({pinned:!it.pinned,updated:now}));
 });
@@ -679,7 +684,7 @@ function openSheet(id){const it=get(id);if(!it)return;S.editing=id;S.confirmDel=
   if(k==='project')h+=title('Project or goal')+f('Status',`<select id="e_status">${STATUSES.map(([v,l])=>`<option value="${v}" ${(it.status||'active')===v?'selected':''}>${l}</option>`).join('')}</select>`)+f('What done looks like',`<textarea id="e_body">${esc(it.body)}</textarea>`);
   if(k==='link')h+=title()+f('List',`<select id="e_list">${LISTS.map(([v,l])=>`<option value="${v}" ${listOf(it)===v?'selected':''}>${l}</option>`).join('')}</select>`)+f('Link (optional)',`<input id="e_url" inputmode="url" value="${esc(it.url)}">`)+f('Why I saved it',`<textarea id="e_body" style="min-height:90px">${esc(it.body)}</textarea>`);
   if(k==='work')h+=title('Thought')+f('Tag',`<select id="e_tag">${TAGS.map(t=>`<option ${t===it.tag?'selected':''}>${t}</option>`).join('')}</select>`)+f('More detail',`<textarea id="e_body">${esc(it.body)}</textarea>`);
-  if(k!=='task')h+=f('Remind me on',`<input type="date" id="e_remind" value="${esc(it.remind)}">`);
+  if(k!=='task')h+=`<div class="inline">${f('Due date',`<input type="date" id="e_due" value="${esc(it.due)}">`)}${f('Remind me on',`<input type="date" id="e_remind" value="${esc(it.remind)}">`)}</div>`;
   h+=`<div class="actions"><button type="button" class="btn danger" id="e_del">Delete</button><div class="right"><button type="button" class="btn ghost" id="e_cancel">Cancel</button><button type="submit" class="btn">Save</button></div></div>`;
   $('sheet').innerHTML=h;$('scrim').hidden=false;
   if(finePointer())setTimeout(()=>{const el=k==='note'?$('e_body'):$('e_title');el&&el.focus()},30)}
