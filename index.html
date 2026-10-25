@@ -324,13 +324,22 @@ function cleanChanges(inp){const u={};if(!inp||typeof inp!=='object')return u;
   if(typeof inp.pinned==='boolean')u.pinned=inp.pinned;
   if(typeof inp.read==='boolean')u.read=inp.read;
   if(typeof inp.project==='string'&&(inp.project===''||pids().includes(inp.project)))u.project=inp.project;
+  if(KINDS[inp.kind])u.kind=inp.kind;
   if(LISTS.some(l=>l[0]===inp.list))u.list=inp.list;
   if(typeof inp.url==='string'){let x=inp.url.trim();if(x&&!/^https?:\/\//i.test(x))x='https://'+x;u.url=x}
   return u}
+function kindDefaults(k,it){const d={};
+  if(k==='task'){if(it.done===undefined)d.done=false;if(it.project===undefined)d.project='';if(it.due===undefined)d.due=''}
+  if(k==='project'&&!it.status)d.status='active';
+  if(k==='link'){if(!it.list)d.list='link';if(it.read===undefined)d.read=false;if(it.url===undefined)d.url=''}
+  if(k==='work'){if(!it.tag)d.tag='Idea';if(it.pinned===undefined)d.pinned=false}
+  return d}
 function parseAction(x){if(!x||typeof x!=='object')return null;
+  if(x.action==='delete'){const it=get(String(x.id||''));return it?{action:'delete',id:it.id,summary:String(x.summary||'').slice(0,140)}:null}
   if(x.action==='update'){const it=get(String(x.id||''));if(!it)return null;const ch=x.changes&&typeof x.changes==='object'?x.changes:{};
     const u=cleanChanges(ch);
     if(typeof ch.append_body==='string'&&ch.append_body.trim())u.body=(it.body?String(it.body).replace(/\s+$/,'')+'\n':'')+ch.append_body.trim();
+    if(u.kind===it.kind)delete u.kind;
     if(!Object.keys(u).length)return null;
     return{action:'update',id:it.id,changes:u,summary:String(x.summary||'').slice(0,140)}}
   const o=clean(x);if(o)o.action='create';return o}
@@ -427,7 +436,7 @@ Split the input into separate entries if it holds several things. Keep titles sh
 Already saved (JSON): ${JSON.stringify(existing)}
 If part of the input is about something already saved (finished it, moved it, renamed it, a detail to add, "remind me about X on Monday", "read that article"), output an update for that item instead of a new entry:
 {"action":"update","id":"<id from the saved list>","changes":{only the fields that change},"summary":"short plain description of the change"}
-Changeable fields: title, due, remind, done (tasks), read (links; also means watched or finished on the watch and book lists), list (link/movie/show/book), status (projects: active/someday/done), tag, pinned, url. Use "" to clear a date. To add a detail, use "append_body" with just the new text. Only update when the match is clear; if unsure, create a new entry.
+Any field can change: kind (task/note/project/link/work; this moves it to another section), title, body (the full new text), due, remind, done (tasks), read (links; also means watched or finished on the movie, show and book lists), list (link/movie/show/book), status (projects: active/someday/done), tag, pinned, url, project (a project id from the saved list, or ""). Use "" to clear a date. To add a detail without replacing the notes, use "append_body" with just the new text. To delete something she clearly asks to remove, output {"action":"delete","id":"<id>","summary":"..."}; she confirms before anything is deleted. Only update when the match is clear; if unsure, create a new entry.
 New entries use "action":"create".
 Reply with only a JSON array like:
 [{"action":"create","kind":"task","title":"Submit expense report","due":"2026-10-30","remind":"2026-10-29","project":"","body":""},{"action":"update","id":"abc123","changes":{"done":true},"summary":"Mark done"},{"action":"create","kind":"work","title":"Add a dark-mode toggle to settings","tag":"Idea","body":""}]
@@ -441,30 +450,31 @@ Input:
   catch(e){toast(aiFail(e))}
   finally{S.sorting=false;btn.disabled=false;btn.textContent='Add'}}
 
-function updRow(p,i){const it=get(p.id);const c=p.changes;const bits=[];
+function updRow(p,i){const it=get(p.id);const c=p.changes||{};const del=p.action==='delete';const bits=[];
+  if(del)bits.push('Delete');if(c.kind)bits.push('Move to '+(c.kind==='link'?'Library':KINDS[c.kind].label));
   if('done' in c)bits.push(c.done?'Mark done':'Reopen');if('read' in c)bits.push(c.read?'Mark read':'Mark unread');
   if('due' in c)bits.push(c.due?'Due '+fmtDue(c.due):'Clear due date');if('remind' in c)bits.push(c.remind?'Remind '+fmtDue(c.remind):'Clear reminder');
   if(c.title)bits.push('Rename to “'+c.title+'”');if('body' in c)bits.push('Add detail');if(c.status)bits.push('Status: '+c.status);if(c.tag)bits.push('Tag: '+c.tag);
   if('pinned' in c)bits.push(c.pinned?'Pin':'Unpin');if('project' in c)bits.push('Change project');if('url' in c)bits.push('Change link');
-  return`<div class="row"><span class="kindsel upd">Update</span><div class="main"><div class="t">${esc(it?(it.title||domain(it.url)):'Item')}</div>${p.summary?`<div class="sub">${esc(p.summary)}</div>`:''}<div class="meta">${bits.map(b=>`<span class="pill acc">${esc(b)}</span>`).join('')}</div></div><button type="button" class="iconbtn" data-drop="${i}" aria-label="Leave this one out">✕</button></div>`}
-function pendTitle(L){const u=L.filter(p=>p.action==='update').length,c=L.length-u;const parts=[];
+  return`<div class="row"><span class="kindsel upd">${del?'Delete':'Update'}</span><div class="main"><div class="t">${esc(it?(it.title||domain(it.url)):'Item')}</div>${p.summary?`<div class="sub">${esc(p.summary)}</div>`:''}<div class="meta">${bits.map(b=>`<span class="pill acc">${esc(b)}</span>`).join('')}</div></div><button type="button" class="iconbtn" data-drop="${i}" aria-label="Leave this one out">✕</button></div>`}
+function pendTitle(L){const u=L.filter(p=>p.action!=='create').length,c=L.length-u;const parts=[];
   if(c)parts.push(`${c} new item${c>1?'s':''}`);if(u)parts.push(`${u} change${u>1?'s':''}`);return'Claude found '+parts.join(' and ')}
 function renderPending(){const P=$('pending');const L=S.pending;
   if(!L||!L.length){S.pending=null;P.hidden=true;P.innerHTML='';return}
   const pt=id=>{const p=get(id);return p?p.title:''};
   P.hidden=false;
   P.innerHTML=`<div class="pendhead"><b>${esc(pendTitle(L))}</b><span class="muted">Check it over, then save.</span></div>
-  <div class="rows">${L.map((p,i)=>p.action==='update'?updRow(p,i):`<div class="row"><select class="kindsel" data-i="${i}" aria-label="Section">${Object.keys(KINDS).map(k=>`<option value="${k}" ${k===p.kind?'selected':''}>${KINDS[k].one}</option>`).join('')}</select>
+  <div class="rows">${L.map((p,i)=>p.action!=='create'?updRow(p,i):`<div class="row"><select class="kindsel" data-i="${i}" aria-label="Section">${Object.keys(KINDS).map(k=>`<option value="${k}" ${k===p.kind?'selected':''}>${KINDS[k].one}</option>`).join('')}</select>
     <div class="main"><div class="t">${esc(p.title||domain(p.url))}</div>${p.body?`<div class="sub">${esc(p.body)}</div>`:''}
     <div class="meta">${p.due?`<span class="pill ${p.due<today()?'over':p.due===today()?'today':''}">${esc(fmtDue(p.due))}</span>`:''}${p.kind==='task'&&p.project?`<span class="pill acc">${esc(pt(p.project))}</span>`:''}${p.kind==='work'?`<span class="pill acc">${esc(p.tag||'Idea')}</span>`:''}${p.kind==='link'&&p.list&&p.list!=='link'?`<span class="pill acc">${esc((LISTS.find(x=>x[0]===p.list)||LISTS[0])[1])}</span>`:''}${p.url?`<span class="pill">${esc(domain(p.url))}</span>`:''}${remPill(p)}</div></div>
     <button type="button" class="iconbtn" data-drop="${i}" aria-label="Leave this one out">✕</button></div>`).join('')}</div>
-  <div class="actions"><button type="button" class="btn ghost sm" id="pCancel">Cancel</button><button type="button" class="btn sm" id="pAdd">${L.some(p=>p.action==='update')?'Save':'Add'} ${L.length>1?'all '+L.length:'it'}</button></div>`}
+  <div class="actions"><button type="button" class="btn ghost sm" id="pCancel">Cancel</button><button type="button" class="btn sm" id="pAdd">${L.some(p=>p.action!=='create')?'Save':'Add'} ${L.length>1?'all '+L.length:'it'}</button></div>`}
 $('pending').addEventListener('change',e=>{const s=e.target.closest('.kindsel');if(!s)return;S.pending[+s.dataset.i].kind=s.value;renderPending()});
 $('pending').addEventListener('click',async e=>{const d=e.target.closest('[data-drop]');
   if(d){S.pending.splice(+d.dataset.drop,1);return renderPending()}
   if(e.target.id==='pCancel'){S.pending=null;return renderPending()}
   if(e.target.id==='pAdd'){const L=S.pending;const now=Date.now();const later=[];
-    const ok=await write(async()=>{for(let i=0;i<L.length;i++){const p=L[i];if(p.action==='update')await col.doc(p.id).update({...p.changes,updated:now});else{const ref=await col.add(toDoc(p,now+i));if(p.kind==='link'&&!p.title&&p.url)later.push([ref.id,p.url])}}},'Saved');
+    const ok=await write(async()=>{for(let i=0;i<L.length;i++){const p=L[i];if(p.action==='delete')await col.doc(p.id).delete();else if(p.action==='update')await col.doc(p.id).update({...(p.changes.kind?kindDefaults(p.changes.kind,get(p.id)||{}):{}),...p.changes,updated:now});else{const ref=await col.add(toDoc(p,now+i));if(p.kind==='link'&&!p.title&&p.url)later.push([ref.id,p.url])}}},'Saved');
     if(ok){S.pending=null;renderPending();later.forEach(([i,u])=>autoTitle(i,u))}}});
 
 $('q').addEventListener('input',e=>{S.q=e.target.value.trim();syncChrome();render()});
@@ -593,9 +603,9 @@ function makeTools(msg){return[
    inputSchema:{type:'object',properties:{kind:{type:'string',enum:Object.keys(KINDS)},title:{type:'string'},due:{type:'string',description:'YYYY-MM-DD deadline, any kind (shows in the task list)'},remind:{type:'string',description:'YYYY-MM-DD day to remind her, any kind'},body:{type:'string'},tag:{type:'string',enum:TAGS,description:'work items only'},url:{type:'string',description:'links only'},list:{type:'string',enum:['link','movie','show','book'],description:'library items only: reading list, movies, TV shows or books'},project:{type:'string',description:'id of an existing project, tasks only'}},required:['kind','title']},
    execute:async inp=>{const o=clean(inp);if(!o)throw new Error('An item needs a title or URL');
      try{const ref=await col.add(toDoc(o,Date.now()));if(o.kind==='link'&&!o.title&&o.url)autoTitle(ref.id,o.url);msg.acts.push('Added “'+(o.title||domain(o.url))+'”');chatRefresh();return{id:ref.id}}catch(e){throw new Error(errMsg(e))}}},
-  {name:'update_item',description:'Change fields on one existing item by its id: title, body, due (YYYY-MM-DD, or "" to clear), remind (YYYY-MM-DD reminder day, or "" to clear), list (link/movie/show/book), done, status (active/someday/done), tag, pinned, read, project (a project id or ""). Cannot delete.',
-   inputSchema:{type:'object',properties:{id:{type:'string'},title:{type:'string'},body:{type:'string'},due:{type:'string'},remind:{type:'string'},list:{type:'string',enum:['link','movie','show','book']},done:{type:'boolean'},status:{type:'string',enum:['active','someday','done']},tag:{type:'string',enum:TAGS},pinned:{type:'boolean'},read:{type:'boolean'},project:{type:'string'}},required:['id']},
-   execute:async inp=>{const it=get(String(inp.id));if(!it)throw new Error('No item has that id');const u=cleanChanges(inp);u.updated=Date.now();
+  {name:'update_item',description:'Change fields on one existing item by its id: kind (task/note/project/link/work; moves it to that section), title, body, due (YYYY-MM-DD, or "" to clear), remind (YYYY-MM-DD reminder day, or "" to clear), list (link/movie/show/book), done, status (active/someday/done), tag, pinned, read, project (a project id or ""). Cannot delete.',
+   inputSchema:{type:'object',properties:{id:{type:'string'},kind:{type:'string',enum:Object.keys(KINDS)},title:{type:'string'},body:{type:'string'},due:{type:'string'},remind:{type:'string'},list:{type:'string',enum:['link','movie','show','book']},done:{type:'boolean'},status:{type:'string',enum:['active','someday','done']},tag:{type:'string',enum:TAGS},pinned:{type:'boolean'},read:{type:'boolean'},project:{type:'string'}},required:['id']},
+   execute:async inp=>{const it=get(String(inp.id));if(!it)throw new Error('No item has that id');const u=cleanChanges(inp);u.updated=Date.now();if(u.kind===it.kind)delete u.kind;else if(u.kind)Object.assign(u,{...kindDefaults(u.kind,it),...u});
      try{await col.doc(it.id).update(u)}catch(e){throw new Error(errMsg(e))}
      msg.acts.push('Updated “'+(it.title||domain(it.url))+'”');chatRefresh();return{ok:true}}}]}
 
@@ -685,15 +695,16 @@ function openSheet(id){const it=get(id);if(!it)return;S.editing=id;S.confirmDel=
   if(k==='link')h+=title()+f('List',`<select id="e_list">${LISTS.map(([v,l])=>`<option value="${v}" ${listOf(it)===v?'selected':''}>${l}</option>`).join('')}</select>`)+f('Link (optional)',`<input id="e_url" inputmode="url" value="${esc(it.url)}">`)+f('Why I saved it',`<textarea id="e_body" style="min-height:90px">${esc(it.body)}</textarea>`);
   if(k==='work')h+=title('Thought')+f('Tag',`<select id="e_tag">${TAGS.map(t=>`<option ${t===it.tag?'selected':''}>${t}</option>`).join('')}</select>`)+f('More detail',`<textarea id="e_body">${esc(it.body)}</textarea>`);
   if(k!=='task')h+=`<div class="inline">${f('Due date',`<input type="date" id="e_due" value="${esc(it.due)}">`)}${f('Remind me on',`<input type="date" id="e_remind" value="${esc(it.remind)}">`)}</div>`;
+  h+=f('Section',`<select id="e_kind">${Object.keys(KINDS).map(x=>`<option value="${x}" ${x===k?'selected':''}>${({task:'Task',note:'Note',project:'Project',link:'Library',work:'Work'})[x]}</option>`).join('')}</select>`);
   h+=`<div class="actions"><button type="button" class="btn danger" id="e_del">Delete</button><div class="right"><button type="button" class="btn ghost" id="e_cancel">Cancel</button><button type="submit" class="btn">Save</button></div></div>`;
   $('sheet').innerHTML=h;$('scrim').hidden=false;
   if(finePointer())setTimeout(()=>{const el=k==='note'?$('e_body'):$('e_title');el&&el.focus()},30)}
 async function sheetAI(){const it=get(S.editing);const inp=$('e_ai');if(!it||!inp||!inp.value.trim())return;const btn=$('e_aiGo');btn.disabled=true;btn.textContent='Working…';
-  const F=['title','due','remind','body','tag','status','url'];const cur={kind:it.kind};F.forEach(k=>{const el=$('e_'+k);if(el)cur[k]=el.value});
-  const prompt=`Today is ${weekday()}, ${today()}. An item from a personal second brain, as JSON:\n${JSON.stringify(cur)}\nApply this change: """${inp.value.trim().slice(0,2000)}"""\nReply with only a JSON object holding just the fields that change, from: ${Object.keys(cur).filter(k=>k!=='kind').join(', ')}. Dates are YYYY-MM-DD and "" clears one; resolve words like "Friday" or "next week" against today. tag is one of Idea, Follow-up, Reference, Question; status is active, someday or done. For body, return the full new text and keep what's there unless asked to remove it.`;
+  const F=['kind','title','due','remind','body','tag','status','url','list','project'];const cur={kind:it.kind};F.forEach(k=>{const el=$('e_'+k);if(el)cur[k]=el.value});
+  const prompt=`Today is ${weekday()}, ${today()}. An item from a personal second brain, as JSON:\n${JSON.stringify(cur)}\nApply this change: """${inp.value.trim().slice(0,2000)}"""\nReply with only a JSON object holding just the fields that change, from: ${Object.keys(cur).filter(k=>k!=='kind').join(', ')}. Dates are YYYY-MM-DD and "" clears one; resolve words like "Friday" or "next week" against today. tag is one of Idea, Follow-up, Reference, Question; status is active, someday or done; kind is task, note, project, link (a library item) or work, and changing it moves the item to that section; list is link, movie, show or book. For body, return the full new text and keep what's there unless asked to remove it.`;
   try{const ch=await S.ai.json(prompt,{modelTier:'quick'});let n=0;
     if(ch&&typeof ch==='object')for(const k of F){const el=$('e_'+k);const v=ch[k];if(!el||typeof v!=='string')continue;
-      if((k==='due'||k==='remind')&&v!==''&&!isDate(v))continue;if(k==='tag'&&!TAGS.includes(v))continue;if(k==='status'&&!STATUSES.some(s=>s[0]===v))continue;
+      if((k==='due'||k==='remind')&&v!==''&&!isDate(v))continue;if(k==='tag'&&!TAGS.includes(v))continue;if(k==='status'&&!STATUSES.some(s=>s[0]===v))continue;if(k==='kind'&&!KINDS[v])continue;if(k==='list'&&!LISTS.some(x=>x[0]===v))continue;
       if(el.value!==v){el.value=v;el.classList.add('changed');n++}}
     if(n){inp.value='';toast('Fields updated. Check them, then Save.')}else toast('Nothing to change there. Try saying it another way.')}
   catch(e){toast(aiFail(e))}finally{btn.disabled=false;btn.textContent='Apply'}}
@@ -708,7 +719,8 @@ $('sheet').addEventListener('click',async e=>{
     const id=S.editing;closeSheet();write(()=>col.doc(id).delete(),'Deleted')}});
 $('sheet').addEventListener('submit',async e=>{e.preventDefault();const it=get(S.editing);if(!it)return closeSheet();
   const v=id=>{const el=$(id);return el?el.value:undefined};const u={updated:Date.now()};
-  ['title','body','due','remind','project','status','tag','list'].forEach(k=>{const x=v('e_'+k);if(x!==undefined)u[k]=k==='body'?x:x.trim()});
+  ['title','body','due','remind','project','status','tag','list','kind'].forEach(k=>{const x=v('e_'+k);if(x!==undefined)u[k]=k==='body'?x:x.trim()});
+  if(u.kind===it.kind)delete u.kind;else if(u.kind)Object.assign(u,{...kindDefaults(u.kind,it),...u});
   if($('e_url')){let x=v('e_url').trim();if(x&&!/^https?:\/\//i.test(x))x='https://'+x;u.url=x}
   const id=S.editing;closeSheet();write(()=>col.doc(id).update(u),'Saved')});
 
