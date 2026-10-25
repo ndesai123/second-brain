@@ -99,6 +99,10 @@ main{padding-bottom:32px}
 .iconbtn.on{color:var(--accent)}
 .out{flex:0 0 auto;font-family:var(--mono);font-size:.78rem;color:var(--accent);text-decoration:none;padding:2px 4px}
 .domain{font-family:var(--mono);font-size:.72rem;color:var(--muted)}
+/* suggested reads from the daily briefing */
+.sgroup .rows{border-color:var(--accent);border-style:dashed}
+.sgroup h2{color:var(--accent)}
+.row .sacts{flex:0 0 auto;display:flex;gap:4px;align-items:center}
 
 .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:14px;text-align:left;display:flex;flex-direction:column;gap:6px;min-width:0}
@@ -352,7 +356,7 @@ function toDoc(p,now){const b={kind:p.kind,title:p.title||'',body:p.body||'',cre
       return{...b,url:p.url||(p.title?(L==='book'?grUrl(p.title,au):(L==='movie'||L==='show')?imdbUrl(p.title):''):''),read:false,list:L}}
     case'work':return{...b,tag:TAGS.includes(p.tag)?p.tag:'Idea',pinned:false};
     default:return b}}
-function brainDump(limit=120000){const rows=S.items.map(i=>{const o={id:i.id,kind:i.kind,title:i.title};
+function brainDump(limit=120000){const rows=S.items.filter(i=>i.kind!=='suggest').map(i=>{const o={id:i.id,kind:i.kind,title:i.title};
     ['due','remind','project','status','tag','url','list'].forEach(k=>{if(i[k])o[k]=i[k]});
     if(i.kind==='task')o.done=!!i.done; if(i.kind==='link')o.read=!!i.read; if(i.pinned)o.pinned=true;
     if(i.body)o.body=String(i.body).slice(0,500); o.created=ymd(new Date(i.created||Date.now()));return o});
@@ -424,7 +428,7 @@ $('capture').addEventListener('submit',async e=>{e.preventDefault();
 async function smartCapture(text){
   S.sorting=true;const btn=$('addBtn');btn.disabled=true;btn.textContent='Sorting…';
   const projects=byKind('project').filter(p=>p.status!=='done').map(p=>({id:p.id,title:p.title}));
-  const existing=S.items.filter(i=>!(i.done&&(Date.now()-(i.doneAt||0))>14*864e5)).slice(0,300).map(i=>{const o={id:i.id,kind:i.kind,title:i.title||i.url};
+  const existing=S.items.filter(i=>i.kind!=='suggest'&&!(i.done&&(Date.now()-(i.doneAt||0))>14*864e5)).slice(0,300).map(i=>{const o={id:i.id,kind:i.kind,title:i.title||i.url};
     ['due','remind','tag','status','list'].forEach(k=>{if(i[k])o[k]=i[k]});if(i.kind==='task')o.done=!!i.done;if(i.kind==='link')o.read=!!i.read;if(i.pinned)o.pinned=true;return o});
   const prompt=`You file what a person types into their personal "second brain": new entries, or changes to things already saved. Today is ${weekday()}, ${today()}.
 Sections:
@@ -512,7 +516,7 @@ function renderToday(){const open=actionable().filter(t=>!isFinished(t));const t
   let h=`<section class="plan"><div class="planhead"><h2>${esc(weekday())}</h2>${aiOn()?`<button type="button" class="btn sm" data-act="plan" ${P.busy?'disabled':''}>${P.busy?'Planning…':P.text?'Re-plan':'✦ Plan my day'}</button>`:''}</div>
     ${P.text?`<div class="md">${md(P.text)}</div>`:`<p class="lead">${esc(lead)}${aiOn()&&!P.busy?' Claude can turn this into a plan.':''}</p>`}${P.err?`<p class="err">${esc(P.err)}</p>`:''}</section>`;
   h+=group('Overdue',over.map(taskRow),'alert')+group('Due today',tod.map(taskRow))+group('Reminders',rems.map(remRow))+group('Next 3 days',soon.map(taskRow))
-    +group('Pinned work',pins.map(workRow));
+    +group('Pinned work',pins.map(workRow))+suggGroup(3);
   if(projs.length)h+=`<section class="group"><h2>Active projects <span class="count">${projs.length}</span></h2><div class="cards">${projs.slice(0,4).map(projectCard).join('')}</div></section>`;
   if(!over.length&&!tod.length&&!rems.length&&!soon.length&&!pins.length&&!projs.length)h+=`<div class="group">${empty('A clear day','Type anything above and Claude will file it. Dated tasks and pinned work notes show up here.')}</div>`;
   return h}
@@ -560,11 +564,19 @@ function renderProjects(){const ps=byKind('project');
 function linkRow(l){const u=safeUrl(l.url);
   return`<div class="row ${l.read?'done':''}"><button type="button" class="main" data-act="edit" data-id="${l.id}">${u&&l.title&&listOf(l)==='link'?`<div class="domain">${esc(domain(u))}</div>`:''}<div class="t">${l.title?esc(l.title):titling.has(l.id)?'<span class="muted">✦ Naming…</span>':esc(domain(u)||'Untitled link')}</div>${l.body?`<div class="sub">${esc(l.body)}</div>`:filling.has(l.id)?'<div class="sub"><span class="muted">✦ Filling in details…</span></div>':''}${l.remind?`<div class="meta">${remPill(l)}</div>`:''}</button>
   ${u?`<a class="out" href="${esc(u)}" target="_blank" rel="noopener">${listOf(l)==='link'?'Open':/imdb\./.test(u)?'IMDb':/justwatch\./.test(u)?'Watch':/goodreads\./.test(u)?'Goodreads':'Open'} ↗</a>`:''}<button type="button" class="iconbtn ${l.read?'on':''}" data-act="read" data-id="${l.id}" aria-label="${l.read?'Undo '+LL(l)[3].toLowerCase():LL(l)[4]}">${l.read?LL(l)[3]:LL(l)[4]}</button></div>`}
+/* suggestions: the daily AI briefing writes kind "suggest" items; Add turns one into a reading-list link, ✕ hides it */
+const suggestions=()=>S.items.filter(i=>i.kind==='suggest'&&!i.dismissed&&safeUrl(i.url)&&(Date.now()-(i.created||0))<14*864e5).sort((a,b)=>(b.created||0)-(a.created||0));
+function suggRow(s){const u=safeUrl(s.url);
+  return`<div class="row"><div class="main"><div class="domain">${esc(s.source||domain(u))}${s.created?' · '+esc(fmtStamp(s.created)):''}</div><div class="t">${esc(s.title||domain(u))}</div>${s.body?`<div class="sub">${esc(s.body)}</div>`:''}</div>
+  <div class="sacts"><a class="out" href="${esc(u)}" target="_blank" rel="noopener">Open ↗</a><button type="button" class="btn sm" data-act="sadd" data-id="${s.id}">Add</button><button type="button" class="iconbtn" data-act="sdismiss" data-id="${s.id}" aria-label="Not interested">✕</button></div></div>`}
+function suggGroup(max){const sg=suggestions();if(!sg.length)return'';const shown=max?sg.slice(0,max):sg;
+  return`<section class="group sgroup"><h2>✦ Suggested reads <span class="count">${sg.length}</span></h2><div class="rows">${shown.map(suggRow).join('')}</div>${max&&sg.length>max?`<div class="filters" style="margin-top:6px"><button type="button" class="chip" data-tab-go="link">See all ${sg.length} in Library</button></div>`:''}</section>`}
 function renderLinks(){const L=LISTS.find(x=>x[0]===S.linkList)||LISTS[0];const links=byKind('link');
   const mine=links.filter(l=>listOf(l)===L[0]).sort((a,b)=>(b.created||0)-(a.created||0));
   let h=`<div class="seg">${LISTS.map(([k,lab])=>{const n=links.filter(l=>listOf(l)===k&&!l.read).length;
     return`<button type="button" class="segb" data-act="llist" data-v="${k}" aria-pressed="${L[0]===k}">${lab}${n?`<span class="count">${n}</span>`:''}</button>`}).join('')}</div>`;
   h+=`<div class="filters">${[['unread',L[2]],['read',L[3]],['all','All']].map(([v,l])=>`<button type="button" class="chip" data-act="lview" data-v="${v}" aria-pressed="${S.linkView===v}">${l}</button>`).join('')}</div>`;
+  if(L[0]==='link'&&S.linkView!=='read')h+=suggGroup(0);
   const list=mine.filter(l=>S.linkView==='all'||(S.linkView==='read'?l.read:!l.read));
   const E={link:['Reading list is empty','Paste any link above to save it for later.'],movie:['No movies yet','Add a movie above.'],show:['No shows yet','Add a TV show above.'],book:['Book list is empty','Add a book above. Auto-sort fills in the author.']}[L[0]];
   return h+(list.length?`<div class="rows">${list.map(linkRow).join('')}</div>`:empty(S.linkView==='read'?`Nothing ${L[3].toLowerCase()} yet`:E[0],E[1]))}
@@ -658,7 +670,7 @@ function renderSearch(){const q=S.q.toLowerCase();
     `<div class="row ${i.done||i.read?'done':''}"><button type="button" class="main" data-act="edit" data-id="${i.id}"><div class="t">${esc(i.title||domain(i.url)||'Untitled')}</div>${i.body?`<div class="sub">${esc(i.body)}</div>`:''}</button></div>`))).join('')}
 
 function renderQuick(){const Q=$('quickRecent');if(!S.quick){Q.hidden=true;return}
-  const rec=S.items.filter(i=>!i.example).sort((a,b)=>(b.created||0)-(a.created||0)).slice(0,5);
+  const rec=S.items.filter(i=>!i.example&&i.kind!=='suggest').sort((a,b)=>(b.created||0)-(a.created||0)).slice(0,5);
   Q.hidden=!rec.length;
   Q.innerHTML=rec.length?group('Just added',rec.map(i=>{const m=(i.due?`<span class="pill">${esc(fmtDue(i.due))}</span>`:'')+remPill(i);
     return`<div class="row"><button type="button" class="main" data-qedit="${i.id}"><div class="domain">${esc(KINDS[i.kind]?KINDS[i.kind].one:'Item')}</div><div class="t">${esc(i.title||domain(i.url)||'Untitled')}</div>${m?`<div class="meta">${m}</div>`:''}</button></div>`})):''}
@@ -675,7 +687,9 @@ function render(){renderTabs();renderQuick();renderHint();
   if(S.q){L.innerHTML=renderSearch();return}
   L.innerHTML={today:renderToday,task:renderTasks,note:renderNotes,project:renderProjects,link:renderLinks,work:renderWork,ask:renderAsk}[S.tab]()}
 
-$('list').addEventListener('click',async e=>{const b=e.target.closest('[data-act]');if(!b)return;const id=b.dataset.id,it=id&&get(id),act=b.dataset.act;
+$('list').addEventListener('click',async e=>{const g=e.target.closest('[data-tab-go]');
+  if(g){S.tab=g.dataset.tabGo;S.linkList='link';S.linkView='unread';try{localStorage.setItem('sb-tab',S.tab)}catch(x){}renderCapture();syncChrome();render();window.scrollTo(0,0);return}
+  const b=e.target.closest('[data-act]');if(!b)return;const id=b.dataset.id,it=id&&get(id),act=b.dataset.act;
   if(act==='edit')return openSheet(id);
   if(act==='tview'){S.taskView=b.dataset.v;return render()}
   if(act==='lview'){S.linkView=b.dataset.v;return render()}
@@ -685,6 +699,8 @@ $('list').addEventListener('click',async e=>{const b=e.target.closest('[data-act
   if(act==='ask'){S.q='';$('q').value='';syncChrome();return ask(b.dataset.q)}
   if(act==='clearchat'){S.chat=[];render();if(finePointer())$('askIn').focus();return}
   if(!it)return;const now=Date.now();
+  if(act==='sadd')return write(()=>col.doc(id).update({kind:'link',list:'link',read:false,url:it.url,title:it.title||'',body:it.body||'',created:now,updated:now}),'Added to your reading list');
+  if(act==='sdismiss')return write(()=>col.doc(id).update({dismissed:true,updated:now}));
   if(act==='unremind')write(()=>col.doc(id).update({remind:'',updated:now}),'Reminder cleared');
   if(act==='toggle'){const fin=isFinished(it);const u={done:!fin,doneAt:fin?null:now,updated:now};
     if(it.kind==='link')u.read=!fin;if(it.kind==='project')u.status=fin?'active':'done';write(()=>col.doc(id).update(u))}
@@ -756,3 +772,4 @@ renderCapture();syncChrome();render();
       if(S.editing&&!get(S.editing))closeSheet()},
     e=>{S.err=e.code||'error';render()})})();
 </script>
+
