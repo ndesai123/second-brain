@@ -135,6 +135,24 @@ main{padding-bottom:32px}
 .askform textarea{flex:1;min-width:0;border:1.5px solid var(--ink);background:var(--surface);border-radius:var(--r);padding:11px 14px;resize:none;min-height:48px;max-height:160px;outline:none;line-height:1.4}
 .askform textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
 
+/* bottom tab bar on phones; top tabs elsewhere */
+.tab .ti{display:none}
+.count.hot{background:var(--accent);color:var(--accent-ink)}
+@media (max-width:640px){
+  body{padding-bottom:calc(76px + env(safe-area-inset-bottom,0px))}
+  .top{padding-block:12px}
+  .tabs{position:fixed;left:0;right:0;bottom:0;z-index:15;margin:0;display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:0;overflow:visible;background:var(--surface);border-top:1px solid var(--line);padding:6px max(4px,env(safe-area-inset-right,0px)) calc(6px + env(safe-area-inset-bottom,0px)) max(4px,env(safe-area-inset-left,0px))}
+  .tab{flex-direction:column;gap:3px;padding:4px 0;border-bottom:0;font-size:.66rem;font-weight:600;min-width:0}
+  .tab .tl{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .tab .ti{display:block;position:relative;width:24px;height:24px}
+  .tab .ti svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+  .tab[aria-selected="true"]{color:var(--accent)}
+  .tab[aria-selected="true"] .ti svg{stroke-width:2.2}
+  .tab .spark,.tab .count.d{display:none}
+  .tab .count.m{position:absolute;top:-6px;left:14px;font-size:.6rem;line-height:15px;padding:0 5px;min-width:16px;text-align:center}
+  .toast{bottom:calc(88px + env(safe-area-inset-bottom,0px))}
+}
+
 /* quick capture */
 .quickhead{display:flex;justify-content:space-between;align-items:center;gap:12px;padding-block:22px 4px}
 .quickhead h1{font-family:var(--display);font-weight:800;font-size:2rem;letter-spacing:-.02em;margin:0;line-height:1.1}
@@ -327,8 +345,17 @@ function counts(){const t=today();return{
   project:byKind('project').filter(i=>(i.status||'active')==='active').length,
   link:byKind('link').filter(i=>!i.read).length,
   work:byKind('work').length}}
+const ICONS={
+  today:'<rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
+  task:'<rect x="4" y="4" width="16" height="16" rx="3.5"/><path d="m8.5 12 2.5 2.5 4.5-5"/>',
+  note:'<path d="M6 3.5h8l4 4V20a.5.5 0 0 1-.5.5h-11A.5.5 0 0 1 6 20z"/><path d="M14 3.5V8h4M9 12.5h6M9 16h4"/>',
+  project:'<path d="M5.5 21V4M5.5 4.5h11.5l-2.5 4 2.5 4H5.5"/>',
+  link:'<path d="M7 3.5h10a1 1 0 0 1 1 1V21l-6-4-6 4V4.5a1 1 0 0 1 1-1z"/>',
+  work:'<rect x="3.5" y="7.5" width="17" height="12" rx="2"/><path d="M9 7.5v-2a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2M3.5 12.5h17"/>',
+  ask:'<path d="M12 3.5l2 5.5 5.5 2-5.5 2-2 5.5-2-5.5-5.5-2 5.5-2z"/>'};
 function renderTabs(){const c=counts();
-  $('tabs').innerHTML=TABS.map(([k,l])=>`<button class="tab" role="tab" data-tab="${k}" aria-selected="${S.tab===k&&!S.q}">${k==='ask'?'<span class="spark" aria-hidden="true">✦</span>':''}${l}${k in c?`<span class="count">${c[k]}</span>`:''}</button>`).join('')}
+  $('tabs').innerHTML=TABS.map(([k,l])=>{const has=k in c,n=c[k],hot=k==='today'&&n>0;const cnt=cls=>has?`<span class="count ${cls}${hot?' hot':''}">${n}</span>`:'';
+    return`<button class="tab" role="tab" data-tab="${k}" aria-selected="${S.tab===k&&!S.q}" aria-label="${l}${has?', '+n:''}"><span class="ti" aria-hidden="true"><svg viewBox="0 0 24 24">${ICONS[k]}</svg>${n?cnt('m'):''}</span>${k==='ask'?'<span class="spark" aria-hidden="true">✦</span>':''}<span class="tl">${l}</span>${cnt('d')}</button>`}).join('')}
 function capKind(){return S.tab==='today'||!KINDS[S.tab]?'task':S.tab}
 function renderCapture(){const smart=aiOn()&&S.smart;const k=capKind();
   $('cap').placeholder=smart?'Add or update anything…':KINDS[k].ph;
@@ -342,7 +369,7 @@ function syncChrome(){$('capture').hidden=S.tab==='ask'&&!S.q;$('askForm').hidde
 
 $('tabs').addEventListener('click',e=>{const b=e.target.closest('[data-tab]');if(!b)return;
   S.tab=b.dataset.tab;S.q='';$('q').value='';try{localStorage.setItem('sb-tab',S.tab)}catch(e){}
-  renderCapture();syncChrome();render();
+  renderCapture();syncChrome();render();window.scrollTo(0,0);
   if(finePointer())(S.tab==='ask'&&aiOn()?$('askIn'):$('cap')).focus({preventScroll:true})});
 $('capExtra').addEventListener('click',e=>{if(e.target.id!=='smartTog')return;S.smart=!S.smart;
   try{localStorage.setItem('sb-smart',S.smart?'1':'0')}catch(e){}renderCapture();$('cap').focus()});
