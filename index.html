@@ -234,7 +234,8 @@ function safeUrl(u){return /^https?:\/\//i.test(u||'')?u:''}
 const byKind=k=>S.items.filter(i=>i.kind===k);
 const get=id=>S.items.find(i=>i.id===id);
 const pids=()=>byKind('project').map(p=>p.id);
-const sortDue=(a,b)=>a.due<b.due?-1:a.due>b.due?1:(a.created||0)-(b.created||0);
+const dk=x=>x.due||x.remind||'';
+const sortDue=(a,b)=>dk(a)<dk(b)?-1:dk(a)>dk(b)?1:(a.created||0)-(b.created||0);
 const inl=s=>s.replace(/\*\*(.+?)\*\*/g,'<b>$1</b>');
 function md(s){const lines=esc(s).split('\n');let out='',list=false;
   for(const l of lines){const m=l.match(/^\s*(?:[-*•]|\d+[.)])\s+(.*)/);
@@ -473,7 +474,7 @@ function renderTasks(){const all=byKind('task');
     return h+(d.length?group('Completed',d.map(taskRow)):empty('Nothing finished yet','Tick a task off and it lands here.'))}
   const open=all.filter(t=>!t.done);const t=today(),wk=addDays(t,7);
   const g={over:[],today:[],week:[],later:[],none:[]};
-  open.forEach(x=>{if(!x.due)g.none.push(x);else if(x.due<t)g.over.push(x);else if(x.due===t)g.today.push(x);else if(x.due<=wk)g.week.push(x);else g.later.push(x)});
+  open.forEach(x=>{const k=dk(x);if(!k)g.none.push(x);else if(k<t)g.over.push(x);else if(k===t)g.today.push(x);else if(k<=wk)g.week.push(x);else g.later.push(x)});
   if(!open.length)return h+empty('All clear','Add a task above. Give it a date to see it under Today or Next 7 days.');
   return h+group('Overdue',g.over.sort(sortDue).map(taskRow),'alert')+group('Today',g.today.map(taskRow))+group('Next 7 days',g.week.sort(sortDue).map(taskRow))
     +group('Later',g.later.sort(sortDue).map(taskRow))+group('No date',g.none.sort((a,b)=>(b.created||0)-(a.created||0)).map(taskRow))}
@@ -599,13 +600,14 @@ function openSheet(id){const it=get(id);if(!it)return;S.editing=id;S.confirmDel=
   const k=it.kind;let h=`<h3>Edit ${KINDS[k].one.toLowerCase()}</h3>`;
   const title=(lab='Title')=>f(lab,`<input id="e_title" value="${esc(it.title)}">`);
   if(k==='task'){const ps=byKind('project').filter(p=>p.status!=='done'||p.id===it.project);
-    h+=title('Task')+`<div class="inline">${f('Due',`<input type="date" id="e_due" value="${esc(it.due)}">`)}${f('Project',`<select id="e_project"><option value="">None</option>${ps.map(p=>`<option value="${p.id}" ${p.id===it.project?'selected':''}>${esc(p.title)}</option>`).join('')}</select>`)}</div>`
+    h+=title('Task')+`<div class="inline">${f('Due date',`<input type="date" id="e_due" value="${esc(it.due)}">`)}${f('Remind me on',`<input type="date" id="e_remind" value="${esc(it.remind)}">`)}</div>`
+      +f('Project',`<select id="e_project"><option value="">None</option>${ps.map(p=>`<option value="${p.id}" ${p.id===it.project?'selected':''}>${esc(p.title)}</option>`).join('')}</select>`)
       +f('Details',`<textarea id="e_body" style="min-height:90px">${esc(it.body)}</textarea>`)}
   if(k==='note')h+=title()+f('Note',`<textarea id="e_body">${esc(it.body)}</textarea>`,'big');
   if(k==='project')h+=title('Project or goal')+f('Status',`<select id="e_status">${STATUSES.map(([v,l])=>`<option value="${v}" ${(it.status||'active')===v?'selected':''}>${l}</option>`).join('')}</select>`)+f('What done looks like',`<textarea id="e_body">${esc(it.body)}</textarea>`);
   if(k==='link')h+=title()+f('URL',`<input id="e_url" inputmode="url" value="${esc(it.url)}">`)+f('Why I saved it',`<textarea id="e_body" style="min-height:90px">${esc(it.body)}</textarea>`);
   if(k==='work')h+=title('Thought')+f('Tag',`<select id="e_tag">${TAGS.map(t=>`<option ${t===it.tag?'selected':''}>${t}</option>`).join('')}</select>`)+f('More detail',`<textarea id="e_body">${esc(it.body)}</textarea>`);
-  h+=f('Remind me on',`<input type="date" id="e_remind" value="${esc(it.remind)}">`);
+  if(k!=='task')h+=f('Remind me on',`<input type="date" id="e_remind" value="${esc(it.remind)}">`);
   h+=`<div class="actions"><button type="button" class="btn danger" id="e_del">Delete</button><div class="right"><button type="button" class="btn ghost" id="e_cancel">Cancel</button><button type="submit" class="btn">Save</button></div></div>`;
   $('sheet').innerHTML=h;$('scrim').hidden=false;
   if(finePointer())setTimeout(()=>{const el=k==='note'?$('e_body'):$('e_title');el&&el.focus()},30)}
