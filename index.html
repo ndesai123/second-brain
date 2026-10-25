@@ -99,6 +99,11 @@ main{padding-bottom:32px}
 .iconbtn.on{color:var(--accent)}
 .out{flex:0 0 auto;font-family:var(--mono);font-size:.78rem;color:var(--accent);text-decoration:none;padding:2px 4px}
 .domain{font-family:var(--mono);font-size:.72rem;color:var(--muted)}
+/* work hours line on the Today card */
+.whrs{margin:10px 0 0;font-size:.82rem;opacity:.75}
+.linkbtn{border:0;background:none;color:inherit;text-decoration:underline;text-underline-offset:2px;padding:0;font:inherit;cursor:pointer}
+.days{display:flex;gap:6px;flex-wrap:wrap}
+.days label{display:flex;align-items:center;gap:4px;border:1px solid var(--line);border-radius:999px;padding:5px 10px;font-size:.85rem;text-transform:none;letter-spacing:0;font-family:var(--body);color:var(--ink)}
 /* suggested reads from the daily briefing */
 .sgroup .rows{border-color:var(--accent);border-style:dashed}
 .sgroup h2{color:var(--accent)}
@@ -252,7 +257,13 @@ const STATUSES=[['active','Active'],['someday','Someday'],['done','Done']];
 const SUGG=['What’s on my plate this week?','What have I been putting off?','Summarize my work ideas','Push everything overdue to Monday'];
 const S={tab:'today',items:[],q:'',taskView:'open',linkView:'unread',linkList:'link',workTag:'all',editing:null,ready:false,err:null,confirmDel:false,
   ai:null,aiDenied:false,tools:false,smart:true,pending:null,sorting:false,plan:{text:'',busy:false,err:''},chat:[],ctl:null};
-let col=null;
+let col=null,DB=null;
+const DEFP={workStart:'09:00',workEnd:'17:00',workDays:[1,2,3,4,5]};
+S.prefs={...DEFP};
+const DAYN=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+function fmtTime(hm){const[h,m]=String(hm).split(':').map(Number);const ap=h<12?'am':'pm';const h12=h%12||12;return h12+(m?':'+pad(m):'')+ap}
+function fmtDays(ds){const s=[...ds].sort();if(s.join()==='1,2,3,4,5')return'Mon–Fri';if(s.length===7)return'Every day';if(!s.length)return'No workdays';return s.map(d=>DAYN[d]).join(', ')}
+function fmtHours(){const P=S.prefs;return P.workDays.length?`${fmtDays(P.workDays)}, ${fmtTime(P.workStart)}–${fmtTime(P.workEnd)}`:'No workdays set'}
 try{const t=localStorage.getItem('sb-tab');if(TABS.some(x=>x[0]===t))S.tab=t}catch(e){}
 try{if(localStorage.getItem('sb-smart')==='0')S.smart=false}catch(e){}
 try{const l=localStorage.getItem('sb-list');if(LISTS.some(x=>x[0]===l))S.linkList=l}catch(e){}
@@ -514,7 +525,7 @@ function renderToday(){const open=actionable().filter(t=>!isFinished(t));const t
   const lead=bits.length?`You have ${bits.join(', ')}.`:'Nothing is due today.';
   const P=S.plan;
   let h=`<section class="plan"><div class="planhead"><h2>${esc(weekday())}</h2>${aiOn()?`<button type="button" class="btn sm" data-act="plan" ${P.busy?'disabled':''}>${P.busy?'Planning…':P.text?'Re-plan':'✦ Plan my day'}</button>`:''}</div>
-    ${P.text?`<div class="md">${md(P.text)}</div>`:`<p class="lead">${esc(lead)}${aiOn()&&!P.busy?' Claude can turn this into a plan.':''}</p>`}${P.err?`<p class="err">${esc(P.err)}</p>`:''}</section>`;
+    ${P.text?`<div class="md">${md(P.text)}</div>`:`<p class="lead">${esc(lead)}${aiOn()&&!P.busy?' Claude can turn this into a plan.':''}</p>`}${P.err?`<p class="err">${esc(P.err)}</p>`:''}${aiOn()?`<p class="whrs">Work hours: ${esc(fmtHours())} · <button type="button" class="linkbtn" data-act="hours">Edit</button></p>`:''}</section>`;
   h+=group('Overdue',over.map(taskRow),'alert')+group('Due today',tod.map(taskRow))+group('Reminders',rems.map(remRow))+group('Next 3 days',soon.map(taskRow))
     +group('Pinned work',pins.map(workRow))+suggGroup(3);
   if(projs.length)h+=`<section class="group"><h2>Active projects <span class="count">${projs.length}</span></h2><div class="cards">${projs.slice(0,4).map(projectCard).join('')}</div></section>`;
@@ -523,13 +534,16 @@ function renderToday(){const open=actionable().filter(t=>!isFinished(t));const t
 
 async function planDay(){if(S.plan.busy)return;S.plan={text:'',busy:true,err:''};render();
   const t=today();const open=actionable().filter(x=>!isFinished(x)).sort((a,b)=>(a.due||'9999')<(b.due||'9999')?-1:1).slice(0,80)
-    .map(x=>({title:x.title,due:x.due||'none',project:x.project&&get(x.project)?get(x.project).title:'',notes:String(x.body||'').slice(0,200)}));
+    .map(x=>({title:x.title,kind:x.kind,due:x.due||'none',project:x.project&&get(x.project)?get(x.project).title:'',notes:String(x.body||'').slice(0,200)}));
   const pins=byKind('work').filter(w=>w.pinned).map(w=>w.title);
   const projs=byKind('project').filter(p=>(p.status||'active')==='active').map(p=>p.title);
-  const prompt=`Help Nemi plan today, ${weekday()} ${t}, using only the items below.
+  const nowD=new Date(),hm=pad(nowD.getHours())+':'+pad(nowD.getMinutes()),WP=S.prefs,workday=WP.workDays.includes(nowD.getDay());
+  const prompt=`Help Nemi plan the rest of today, ${weekday()} ${t}. It's now ${hm}.
+${workday?`Today is a workday: she works ${WP.workStart}–${WP.workEnd} at her job. During work hours, focus on work items (work notes and job-related tasks); put personal tasks before or after work. If work hours are already over, plan only the evening; if they haven't started yet, include a short before-work window.`:`Today is not a workday, so focus on personal things; mention work items only if one is overdue or due today.`}
+Never schedule anything in time that has already passed. Use only the items below.
 Write:
-- One opening sentence on the shape of the day.
-- Then 3 bullets ("- ") with the most important things to do today, in order, each with a few words on why. Overdue and due-today items come first unless something is clearly bigger.
+- One opening sentence on the shape of the rest of the day.
+- Then up to 4 bullets ("- ") with the most important things to do, in order, each starting with a bold time window that fits her day (like **Before work:**, **At work:**, **After work:**, **Evening:**) and a few words on why. Overdue and due-today items come first unless something is clearly bigger.
 - Then one bullet that starts with "**Can wait:**" naming what's safe to push, if anything.
 Under 120 words. No headings. If there's little on the list, say so and suggest one useful thing from the projects or work notes.
 
@@ -696,6 +710,7 @@ $('list').addEventListener('click',async e=>{const g=e.target.closest('[data-tab
   if(act==='llist'){S.linkList=b.dataset.v;try{localStorage.setItem('sb-list',S.linkList)}catch(e){}renderCapture();render();return backfillTitles()}
   if(act==='wtag'){S.workTag=b.dataset.v;return render()}
   if(act==='plan')return planDay();
+  if(act==='hours')return openHours();
   if(act==='ask'){S.q='';$('q').value='';syncChrome();return ask(b.dataset.q)}
   if(act==='clearchat'){S.chat=[];render();if(finePointer())$('askIn').focus();return}
   if(!it)return;const now=Date.now();
@@ -740,7 +755,13 @@ async function sheetAI(){const it=get(S.editing);const inp=$('e_ai');if(!it||!in
     if(n){inp.value='';toast('Fields updated. Check them, then Save.')}else toast('Nothing to change there. Try saying it another way.')}
   catch(e){toast(aiFail(e))}finally{btn.disabled=false;btn.textContent='Apply'}}
 $('sheet').addEventListener('keydown',e=>{if(e.target.id==='e_ai'&&e.key==='Enter'&&!e.isComposing){e.preventDefault();sheetAI()}});
-function closeSheet(){$('scrim').hidden=true;S.editing=null}
+function openHours(){const P=S.prefs;S.editing=null;S.hoursOpen=true;
+  $('sheet').innerHTML=`<h3>Work hours</h3><p class="muted" style="margin:0">Plan my day uses these to keep work in work hours and personal things around them.</p>
+  <div class="inline">${f('Start',`<input type="time" id="e_ws" value="${esc(P.workStart)}">`)}${f('End',`<input type="time" id="e_we" value="${esc(P.workEnd)}">`)}</div>
+  ${f('Workdays',`<div class="days">${[1,2,3,4,5,6,0].map(d=>`<label><input type="checkbox" value="${d}" ${P.workDays.includes(d)?'checked':''}> ${DAYN[d]}</label>`).join('')}</div>`)}
+  <div class="actions"><span></span><div class="right"><button type="button" class="btn ghost" id="e_cancel">Cancel</button><button type="submit" class="btn">Save</button></div></div>`;
+  $('scrim').hidden=false}
+function closeSheet(){$('scrim').hidden=true;S.editing=null;S.hoursOpen=false}
 $('scrim').addEventListener('click',e=>{if(e.target===$('scrim'))closeSheet()});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('scrim').hidden)closeSheet()});
 $('sheet').addEventListener('click',async e=>{
@@ -748,7 +769,15 @@ $('sheet').addEventListener('click',async e=>{
   if(e.target.id==='e_cancel')return closeSheet();
   if(e.target.id==='e_del'){if(!S.confirmDel){S.confirmDel=true;e.target.textContent='Tap again to delete';return}
     const id=S.editing;closeSheet();write(()=>col.doc(id).delete(),'Deleted')}});
-$('sheet').addEventListener('submit',async e=>{e.preventDefault();const it=get(S.editing);if(!it)return closeSheet();
+$('sheet').addEventListener('submit',async e=>{e.preventDefault();
+  if(S.hoursOpen){const ws=$('e_ws').value||DEFP.workStart,we=$('e_we').value||DEFP.workEnd;
+    const days=[...$('sheet').querySelectorAll('.days input:checked')].map(x=>+x.value);
+    if(ws>=we){toast('End time needs to be after the start time.');return}
+    const p={workStart:ws,workEnd:we,workDays:days};closeSheet();
+    if(!DB){toast('Open this page in Claude to save changes.');return}
+    try{await DB.doc('config/prefs').set(p);S.prefs=p;render();toast('Work hours saved')}catch(x){toast(errMsg(x))}
+    return}
+  const it=get(S.editing);if(!it)return closeSheet();
   const v=id=>{const el=$(id);return el?el.value:undefined};const u={updated:Date.now()};
   ['title','body','due','remind','project','status','tag','list','kind'].forEach(k=>{const x=v('e_'+k);if(x!==undefined)u[k]=k==='body'?x:x.trim()});
   if(u.kind===it.kind)delete u.kind;else if(u.kind)Object.assign(u,{...kindDefaults(u.kind,it),...u});
@@ -766,7 +795,8 @@ renderCapture();syncChrome();render();
     renderCapture();syncChrome();render()});
   const db=await c.use('db');
   if(!db){S.err='offline';return render()}
-  col=db.collection('items');
+  col=db.collection('items');DB=db;
+  db.doc('config/prefs').onSnapshot(s=>{if(s.exists){const d=s.data()||{};S.prefs={workStart:/^\d\d:\d\d$/.test(d.workStart)?d.workStart:DEFP.workStart,workEnd:/^\d\d:\d\d$/.test(d.workEnd)?d.workEnd:DEFP.workEnd,workDays:Array.isArray(d.workDays)?d.workDays.filter(x=>Number.isInteger(x)&&x>=0&&x<7):DEFP.workDays.slice()}}if(S.ready)render()},()=>{});
   col.onSnapshot(s=>{S.items=s.docs.map(d=>Object.assign({id:d.id},d.data()));S.ready=true;
       if(!(S.tab==='ask'&&S.ctl))render();else renderTabs();
       if(S.editing&&!get(S.editing))closeSheet()},
