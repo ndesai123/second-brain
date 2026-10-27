@@ -5,7 +5,7 @@ A personal second brain that keeps your tasks, notes, projects, work thoughts an
 It's a single `index.html` file that runs two ways:
 
 - **Inside [Claude](https://claude.ai)** as an artifact: your data syncs through your Claude account, and the smart features use your Claude plan. No setup beyond publishing it.
-- **On its own, in any browser:** open the file or host it (for example on GitHub Pages). Your data is saved in that browser, and the smart features use your own Anthropic API key.
+- **On its own, in any browser:** open the file or host it (for example on GitHub Pages). Your data is saved in that browser, and the smart features use an AI provider you choose: Anthropic, OpenAI, Google Gemini, OpenRouter, Groq, a model on your own computer through Ollama, or any OpenAI-compatible API.
 
 Either way, your data never lands in this repo.
 
@@ -73,7 +73,19 @@ To update the page later, ask Claude to republish the artifact from the new `ind
 
 1. Open `index.html` in a browser, or host it anywhere static. GitHub Pages works: Settings → Pages → deploy from the `main` branch.
 2. Everything works right away without AI: capture, tasks, lists, reminders and search. Items are saved in that browser (`localStorage`).
-3. To turn on the smart features, open **⚙ Settings** and paste an [Anthropic API key](https://console.anthropic.com/settings/keys). Requests go straight from your browser to Anthropic's API and are billed to your Anthropic account. Quick jobs like auto-sort and auto-fill use a Haiku model, and planning and Ask use a Sonnet model.
+3. To turn on the smart features, open **⚙ Settings**, pick an **AI provider** and paste its API key. Requests go straight from your browser to that provider and are billed to your account with them.
+
+   | Provider | Notes |
+   |---|---|
+   | Anthropic (Claude) | Messages API |
+   | OpenAI | |
+   | Google Gemini | Uses Gemini's OpenAI-compatible endpoint |
+   | OpenRouter | One key for models from many companies |
+   | Groq | |
+   | Ollama | Runs models on your computer with no key. Start it with `OLLAMA_ORIGINS=*` so the page can reach it. |
+   | Other | Any OpenAI-compatible `/chat/completions` API. Set its base URL. |
+
+   Each provider has a **Model** (planning and Ask) and a cheaper **Quick model** (auto-sort and auto-fill). They come pre-filled with suggestions; change them to any model your provider offers. The provider must accept requests from a browser (CORS), which the ones above do. Ask uses tool calling, so pick a model that supports it.
 4. Use **Export** in Settings for backups or to move to another browser, and **Import** to load a backup. The API key is never included in an export.
 
 When the page detects it's running inside Claude it uses Option 1 automatically, otherwise Option 2. It's the same file either way.
@@ -108,7 +120,7 @@ If something outside the page, such as a scheduled Claude task, writes items wit
 ## Privacy
 
 - **Inside Claude:** the artifact is private to you unless you share it. The database rules above keep your items readable and writable by you alone, even if you share the link. Smart features run under your Claude account.
-- **On its own:** your items and API key stay in your browser's storage. The page has no server of its own. The only network calls are to Anthropic's API, made with your key when you use a smart feature.
+- **On its own:** your items and API key stay in your browser's storage. The page has no server of its own. The only network calls go to the AI provider you picked, made with your key when you use a smart feature.
 - Either way, smart features send only what they need. For example, Ask includes your saved items so it can answer.
 - This repo contains only the page's code. No personal data is stored here.
 
