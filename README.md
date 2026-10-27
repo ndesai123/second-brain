@@ -1,8 +1,13 @@
 # Second Brain
 
-A personal second brain that lives inside [Claude](https://claude.ai) as an artifact. It keeps your tasks, notes, projects, work thoughts and a library of links, movies, shows and books in one place, and uses Claude to file, update and plan around everything you save.
+A personal second brain that keeps your tasks, notes, projects, work thoughts and a library of links, movies, shows and books in one place, and uses Claude to file, update and plan around everything you save.
 
-It's a single `index.html` file. Your data stays in your own Claude account, not in this repo.
+It's a single `index.html` file that runs two ways:
+
+- **Inside [Claude](https://claude.ai)** as an artifact: your data syncs through your Claude account, and the smart features use your Claude plan. No setup beyond publishing it.
+- **On its own, in any browser:** open the file or host it (for example on GitHub Pages). Your data is saved in that browser, and the smart features use your own Anthropic API key.
+
+Either way, your data never lands in this repo.
 
 <p>
   <img src="docs/screenshots/today-phone.png" alt="Today view on a phone with a Claude-written plan for the day" width="270">
@@ -48,7 +53,9 @@ On narrow screens, a bottom tab bar keeps every section in thumb reach. It has l
 
 ## Setting it up
 
-The page uses two features of Claude artifacts: a private **database** for your items, and **Claude** itself for the smart features. It only works inside Claude (claude.ai or the Claude apps). Opened anywhere else, it shows an "Open this page in Claude" screen.
+### Option 1: inside Claude (syncs across your devices)
+
+The page uses two features of Claude artifacts: a private **database** for your items, and **Claude** itself for the smart features.
 
 1. Start a chat with Claude, attach `index.html`, and ask it to publish the file as an artifact with the **database** and **Claude (sample)** capabilities. Make the database readable and writable by the owner only:
 
@@ -57,10 +64,19 @@ The page uses two features of Claude artifacts: a private **database** for your 
    ```
 
 2. Open the artifact. The first time you use a smart feature, it asks you to allow Claude. Those requests use your normal Claude usage.
-3. On the **Today** card, tap **Edit** next to *Work hours* to set your name, work hours and workdays.
+3. Tap the **⚙ Settings** button in the header to set your name, work hours and workdays.
 4. Pin it to your sidebar, or add it to your phone's home screen. Use the `#capture` link for the quick-capture view.
 
 To update the page later, ask Claude to republish the artifact from the new `index.html`. Your data is kept.
+
+### Option 2: on its own, in any browser
+
+1. Open `index.html` in a browser, or host it anywhere static. GitHub Pages works: Settings → Pages → deploy from the `main` branch.
+2. Everything works right away without AI: capture, tasks, lists, reminders and search. Items are saved in that browser (`localStorage`).
+3. To turn on the smart features, open **⚙ Settings** and paste an [Anthropic API key](https://console.anthropic.com/settings/keys). Requests go straight from your browser to Anthropic's API and are billed to your Anthropic account. Quick jobs like auto-sort and auto-fill use a Haiku model, and planning and Ask use a Sonnet model.
+4. Use **Export** in Settings for backups or to move to another browser, and **Import** to load a backup. The API key is never included in an export.
+
+When the page detects it's running inside Claude it uses Option 1 automatically, otherwise Option 2. It's the same file either way.
 
 ### Link shortcuts
 
@@ -77,7 +93,7 @@ Add one of these to the end of your artifact link:
 
 ## How data is stored
 
-Everything is in the artifact's database, in two places:
+Inside Claude, everything is in the artifact's database. On its own, the same shapes are kept in `localStorage` (`sb-items`, `sb-prefs`). There are two places:
 
 - **`items`**: one document per item, with a `kind` of `task`, `note`, `project`, `link` or `work`.
   - Common fields: `title`, `body`, `due` and `remind` (`YYYY-MM-DD`), plus `created` and `updated` timestamps.
@@ -91,8 +107,9 @@ If something outside the page, such as a scheduled Claude task, writes items wit
 
 ## Privacy
 
-- The artifact is private to you unless you share it. The database rules above keep your items readable and writable by you alone, even if you share the link.
-- Smart features send what they need to Claude, under your account. For example, Ask includes your saved items so it can answer.
+- **Inside Claude:** the artifact is private to you unless you share it. The database rules above keep your items readable and writable by you alone, even if you share the link. Smart features run under your Claude account.
+- **On its own:** your items and API key stay in your browser's storage. The page has no server of its own. The only network calls are to Anthropic's API, made with your key when you use a smart feature.
+- Either way, smart features send only what they need. For example, Ask includes your saved items so it can answer.
 - This repo contains only the page's code. No personal data is stored here.
 
 ## License
