@@ -99,6 +99,15 @@ main{padding-bottom:32px}
 .iconbtn.on{color:var(--accent)}
 .out{flex:0 0 auto;font-family:var(--mono);font-size:.78rem;color:var(--accent);text-decoration:none;padding:2px 4px}
 .domain{font-family:var(--mono);font-size:.72rem;color:var(--muted)}
+/* header settings button and standalone notice */
+.hdr-r{display:flex;align-items:center;gap:8px}
+.gear{border:0;background:none;padding:4px;color:var(--muted);display:grid;place-items:center;border-radius:8px}
+.gear:hover{color:var(--accent)}
+.gear svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.keynote{background:var(--accent-soft);color:var(--ink);border-radius:var(--r);padding:12px 14px;margin-bottom:12px;display:flex;gap:10px 14px;align-items:center;justify-content:space-between;flex-wrap:wrap;font-size:.9rem}
+.keynote p{margin:0;flex:1 1 240px;min-width:0}
+.small{font-size:.8rem}
+.filebtn{display:inline-flex;align-items:center;cursor:pointer;text-transform:none!important;letter-spacing:0!important;font-family:var(--body)!important;color:var(--ink)!important}
 /* work hours line on the Today card */
 .whrs{margin:10px 0 0;font-size:.82rem;opacity:.75}
 .linkbtn{border:0;background:none;color:inherit;text-decoration:underline;text-underline-offset:2px;padding:0;font:inherit;cursor:pointer}
@@ -208,7 +217,7 @@ input[type=date]::-webkit-date-and-time-value{text-align:left}
 
 <header class="top">
   <div class="wrap">
-    <div class="brand"><h1>Second <span>Brain</span></h1><div class="stamp" id="stamp"></div></div>
+    <div class="brand"><h1>Second <span>Brain</span></h1><div class="hdr-r"><div class="stamp" id="stamp"></div><button type="button" class="gear" id="gearBtn" aria-label="Settings" title="Settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button></div></div>
     <div class="search">
       <svg viewBox="0 0 24 24" fill="none" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
       <input id="q" type="search" placeholder="Search everything" autocomplete="off" aria-label="Search everything">
@@ -313,6 +322,7 @@ async function write(fn,okMsg){if(!col){toast('Open this page in Claude to save 
 /* ---------- Claude helpers ---------- */
 const OFF=['not_granted','sampling_disabled','not_declared','capability_disabled','capability_removed','tools_unavailable'];
 function aiMsg(e){const c=e&&e.code;
+  if(c==='bad_key')return'Your Anthropic API key was rejected. Check it in Settings.';
   if(OFF.includes(c))return'Claude isn’t allowed on this page, so the smart features are off. You can turn it on from the page’s Permissions menu.';
   if(c==='rate_limited')return'You’ve hit a Claude usage limit. Try again in a little while.';
   if(c==='session_expired')return'Sign in to Claude again, then try once more.';
@@ -526,7 +536,7 @@ function renderToday(){const open=actionable().filter(t=>!isFinished(t));const t
   const bits=[];if(tod.length)bits.push(`${tod.length} due today`);if(rems.length)bits.push(`${rems.length} reminder${rems.length>1?'s':''}`);if(over.length)bits.push(`${over.length} overdue`);if(soon.length)bits.push(`${soon.length} coming up`);
   const lead=bits.length?`You have ${bits.join(', ')}.`:'Nothing is due today.';
   const P=S.plan;
-  let h=`<section class="plan"><div class="planhead"><h2>${esc(weekday())}</h2>${aiOn()?`<button type="button" class="btn sm" data-act="plan" ${P.busy?'disabled':''}>${P.busy?'Planning…':P.text?'Re-plan':'✦ Plan my day'}</button>`:''}</div>
+  let h=(S.mode==='local'&&!S.ai?`<section class="keynote"><p><b>Running in your browser.</b> Your items are saved on this device. Add an Anthropic API key to turn on auto-sort, Plan my day, Ask and auto-fill.</p><button type="button" class="btn sm" data-act="hours">Add key</button></section>`:'')+`<section class="plan"><div class="planhead"><h2>${esc(weekday())}</h2>${aiOn()?`<button type="button" class="btn sm" data-act="plan" ${P.busy?'disabled':''}>${P.busy?'Planning…':P.text?'Re-plan':'✦ Plan my day'}</button>`:''}</div>
     ${P.text?`<div class="md">${md(P.text)}</div>`:`<p class="lead">${esc(lead)}${aiOn()&&!P.busy?' Claude can turn this into a plan.':''}</p>`}${P.err?`<p class="err">${esc(P.err)}</p>`:''}${aiOn()?`<p class="whrs">Work hours: ${esc(fmtHours())} · <button type="button" class="linkbtn" data-act="hours">Edit</button></p>`:''}</section>`;
   h+=group('Overdue',over.map(taskRow),'alert')+group('Due today',tod.map(taskRow))+group('Reminders',rems.map(remRow))+group('Next 3 days',soon.map(taskRow))
     +group('Pinned work',pins.map(workRow))+suggGroup(3);
@@ -632,7 +642,8 @@ async function enrich(id,item){const it=get(id)||item;if(!aiOn()||!it||filling.h
 
 /* ---------- ask ---------- */
 function renderAsk(){
-  if(!S.ai)return empty('Ask needs Claude','Open this page in the Claude app or on claude.ai to ask questions about what you’ve saved.');
+  if(!S.ai)return S.mode==='local'?`${empty('Ask needs an API key','Add your Anthropic API key in Settings to ask questions about what you’ve saved.')}<div class="filters" style="margin-top:10px;justify-content:center"><button type="button" class="chip" data-act="hours">Open Settings</button></div>`
+    :empty('Ask needs Claude','Open this page in the Claude app or on claude.ai to ask questions about what you’ve saved.');
   if(S.aiDenied)return empty('Claude isn’t allowed on this page','Turn it on from this page’s Permissions menu, then reload to use Ask.');
   if(!S.chat.length)return`<div class="askintro"><h2>Ask your brain</h2><p class="muted" style="margin:0">Ask about anything you’ve saved${S.tools?', or tell it to add, reschedule or tick things off. It never deletes anything':''}.</p>
     <div class="sugg">${SUGG.filter(q=>S.tools||!q.startsWith('Push')).map(q=>`<button type="button" class="chip" data-act="ask" data-q="${esc(q)}">${esc(q)}</button>`).join('')}</div></div>`;
@@ -761,13 +772,25 @@ function openHours(){const P=S.prefs;S.editing=null;S.hoursOpen=true;
   $('sheet').innerHTML=`<h3>Settings</h3>${f('Your name',`<input id="e_name" value="${esc(P.name||'')}" placeholder="So Claude can use it in plans and answers" maxlength="40" autocomplete="given-name">`)}<p class="muted" style="margin:0">Work hours: Plan my day keeps work in these hours and personal things around them.</p>
   <div class="inline">${f('Start',`<input type="time" id="e_ws" value="${esc(P.workStart)}">`)}${f('End',`<input type="time" id="e_we" value="${esc(P.workEnd)}">`)}</div>
   ${f('Workdays',`<div class="days">${[1,2,3,4,5,6,0].map(d=>`<label><input type="checkbox" value="${d}" ${P.workDays.includes(d)?'checked':''}> ${DAYN[d]}</label>`).join('')}</div>`)}
+  ${S.mode==='local'?`<div class="field"><label for="e_key">Anthropic API key</label><input id="e_key" type="password" value="${esc(lsGet(LSK.key,''))}" placeholder="sk-ant-…" autocomplete="off" spellcheck="false">
+    <span class="muted small">Turns on auto-sort, Plan my day, Ask and auto-fill. It’s saved only in this browser and sent only to Anthropic, and usage is billed to your Anthropic account. Get a key at <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>.</span></div>
+  <div class="field"><label>Your data</label><span class="muted small">Saved in this browser only. Export a backup now and then, or to move to another device.</span>
+    <div class="inline"><button type="button" class="btn ghost sm" id="e_export">Export</button><label class="btn ghost sm filebtn">Import<input type="file" id="e_import" accept="application/json,.json" hidden></label></div></div>`:''}
   <div class="actions"><span></span><div class="right"><button type="button" class="btn ghost" id="e_cancel">Cancel</button><button type="submit" class="btn">Save</button></div></div>`;
   $('scrim').hidden=false}
+function exportData(){if(!DB||!DB.exportAll)return;const blob=new Blob([JSON.stringify(DB.exportAll(),null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='second-brain-'+today()+'.json';document.body.appendChild(a);a.click();
+  setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000);toast('Exported')}
+$('sheet').addEventListener('change',async e=>{if(e.target.id!=='e_import'||!e.target.files[0])return;
+  try{const n=DB.importAll(JSON.parse(await e.target.files[0].text()));closeSheet();toast(`Imported ${n} item${n===1?'':'s'}`)}
+  catch(x){toast('That file isn’t a Second Brain export.')}});
+$('gearBtn').addEventListener('click',()=>openHours());
 function closeSheet(){$('scrim').hidden=true;S.editing=null;S.hoursOpen=false}
 $('scrim').addEventListener('click',e=>{if(e.target===$('scrim'))closeSheet()});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!$('scrim').hidden)closeSheet()});
 $('sheet').addEventListener('click',async e=>{
   if(e.target.id==='e_aiGo')return sheetAI();
+  if(e.target.id==='e_export')return exportData();
   if(e.target.id==='e_cancel')return closeSheet();
   if(e.target.id==='e_del'){if(!S.confirmDel){S.confirmDel=true;e.target.textContent='Tap again to delete';return}
     const id=S.editing;closeSheet();write(()=>col.doc(id).delete(),'Deleted')}});
@@ -775,7 +798,9 @@ $('sheet').addEventListener('submit',async e=>{e.preventDefault();
   if(S.hoursOpen){const ws=$('e_ws').value||DEFP.workStart,we=$('e_we').value||DEFP.workEnd;
     const days=[...$('sheet').querySelectorAll('.days input:checked')].map(x=>+x.value);
     if(ws>=we){toast('End time needs to be after the start time.');return}
-    const p={name:($('e_name').value||'').trim().slice(0,40),workStart:ws,workEnd:we,workDays:days};closeSheet();
+    const p={name:($('e_name').value||'').trim().slice(0,40),workStart:ws,workEnd:we,workDays:days};
+    const keyVal=$('e_key')?$('e_key').value.trim():null;closeSheet();
+    if(keyVal!==null){try{localStorage.setItem(LSK.key,JSON.stringify(keyVal))}catch(x){}setLocalAI();renderCapture();syncChrome()}
     if(!DB){toast('Open this page in Claude to save changes.');return}
     try{await DB.doc('config/prefs').set(p);S.prefs=p;render();toast('Settings saved')}catch(x){toast(errMsg(x))}
     return}
@@ -786,17 +811,78 @@ $('sheet').addEventListener('submit',async e=>{e.preventDefault();
   if($('e_url')){let x=v('e_url').trim();if(x&&!/^https?:\/\//i.test(x))x='https://'+x;u.url=x}
   const id=S.editing;closeSheet();write(()=>col.doc(id).update(u),'Saved')});
 
+/* ---------- standalone mode: browser storage + your own Anthropic API key ---------- */
+const LSK={items:'sb-items',prefs:'sb-prefs',key:'sb-api-key'};
+const lsGet=(k,d)=>{try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}};
+function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){throw{code:'quota_exceeded'}}}
+function localStore(){let items=lsGet(LSK.items,{})||{};const subs=new Set(),psubs=new Set();
+  const snap=()=>({docs:Object.entries(items).map(([id,d])=>({id,exists:true,data:()=>d}))});
+  const emit=()=>{const s=snap();subs.forEach(f=>f(s))};
+  const save=()=>{lsSet(LSK.items,items);emit()};
+  const pemit=()=>{const p=lsGet(LSK.prefs,null);psubs.forEach(f=>f({exists:!!p,data:()=>p||{}}))};
+  window.addEventListener('storage',e=>{if(e.key===LSK.items){items=lsGet(LSK.items,{})||{};emit()}if(e.key===LSK.prefs)pemit()});
+  const rid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,8);
+  const clone=o=>JSON.parse(JSON.stringify(o));
+  const col={onSnapshot(n){subs.add(n);setTimeout(()=>n(snap()),0);return()=>subs.delete(n)},
+    async add(d){const id=rid();items[id]=clone(d);save();return{id}},
+    doc(id){return{async update(u){if(!items[id])throw{code:'invalid_argument'};items[id]={...items[id],...clone(u)};save()},
+      async delete(){delete items[id];save()},async set(d){items[id]=clone(d);save()}}}};
+  const prefs={onSnapshot(n){psubs.add(n);setTimeout(pemit,0);return()=>psubs.delete(n)},async set(p){lsSet(LSK.prefs,p);pemit()}};
+  return{collection:()=>col,doc:()=>prefs,
+    exportAll:()=>({app:'second-brain',version:1,exported:new Date().toISOString(),items:Object.entries(items).map(([id,d])=>({id,...d})),prefs:lsGet(LSK.prefs,null)}),
+    importAll(data){if(!data||!Array.isArray(data.items))throw new Error('Not an export');let n=0;
+      for(const it of data.items){if(!it||typeof it!=='object'||!KINDS[it.kind]&&it.kind!=='suggest')continue;const{id,...rest}=it;items[String(id||rid())]=clone(rest);n++}
+      save();if(data.prefs&&typeof data.prefs==='object'){lsSet(LSK.prefs,data.prefs);pemit()}return n}}}
+function parseJsonLoose(t){t=String(t||'').trim();try{return JSON.parse(t)}catch(e){}
+  const f=t.match(/```(?:json)?\s*([\s\S]*?)```/);if(f){try{return JSON.parse(f[1])}catch(e){}}
+  const a=Math.min(...['[','{'].map(c=>{const i=t.indexOf(c);return i<0?Infinity:i})),b=Math.max(t.lastIndexOf(']'),t.lastIndexOf('}'));
+  if(a<b)return JSON.parse(t.slice(a,b+1));throw new Error('No JSON')}
+const API_MODELS={quick:'claude-haiku-5-5',default:'claude-sonnet-5-5',complex:'claude-opus-5-5'};
+function apiSampler(key){
+  async function call(input,opts={}){
+    const turns=typeof input==='string'?[{role:'user',content:input}]:input;const messages=[];
+    for(const m of turns){const last=messages[messages.length-1];if(last&&last.role===m.role)last.content+='\n\n'+m.content;else messages.push({role:m.role,content:String(m.content)})}
+    const tools=Array.isArray(opts.tools)&&opts.tools.length?opts.tools:null;const model=API_MODELS[opts.modelTier]||API_MODELS.default;let text='';
+    for(let round=0;round<6;round++){
+      const body={model,max_tokens:2048,messages};
+      if(tools)body.tools=tools.map(t=>({name:t.name,description:t.description,input_schema:t.inputSchema||{type:'object',properties:{}}}));
+      let r;try{r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',signal:opts.signal,
+        headers:{'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify(body)})}
+      catch(e){throw{code:e&&e.name==='AbortError'?'cancelled':'upstream_error',text}}
+      if(!r.ok){let msg='';try{msg=(await r.json()).error.message}catch(e){}
+        throw{code:r.status===401||r.status===403?'bad_key':r.status===429?'rate_limited':r.status===400?'invalid_request':'upstream_error',message:msg,text}}
+      const j=await r.json();const parts=j.content||[];
+      const t=parts.filter(p=>p.type==='text').map(p=>p.text).join('');
+      if(t){text+=(text?'\n\n':'')+t;if(opts.onText)try{opts.onText({text,delta:t})}catch(e){}}
+      const uses=parts.filter(p=>p.type==='tool_use');
+      if(!tools||j.stop_reason!=='tool_use'||!uses.length){if(!text)throw{code:'empty_completion'};return{text,truncated:j.stop_reason==='max_tokens',modelTierApplied:opts.modelTier||'default'}}
+      messages.push({role:'assistant',content:parts});const results=[];
+      for(const u of uses){const tool=tools.find(x=>x.name===u.name);let out,err=false;
+        try{if(!tool)throw new Error('Unknown tool');out=await tool.execute(u.input||{},{signal:opts.signal||new AbortController().signal})}
+        catch(e){out='Error: '+(e&&e.message||e);err=true}
+        results.push({type:'tool_result',tool_use_id:u.id,content:typeof out==='string'?out:JSON.stringify(out),is_error:err})}
+      messages.push({role:'user',content:results})}
+    return{text,truncated:true,modelTierApplied:opts.modelTier||'default'}}
+  const sample=(i,o)=>call(i,o);
+  sample.json=async(i,o)=>{const inp=typeof i==='string'?i+'\n\nReply with only the JSON value, no other text.':i;const r=await call(inp,o);
+    try{return parseJsonLoose(r.text)}catch(e){throw{code:'invalid_json',text:r.text}}};
+  sample.limits=async()=>({maxPromptBytes:262144,tools:{maxCount:16}});
+  return sample}
+function setLocalAI(){const k=lsGet(LSK.key,'');S.ai=k?apiSampler(k):null;S.tools=!!k;S.aiDenied=false}
+
 /* ---------- boot ---------- */
 $('quickRecent').addEventListener('click',e=>{const b=e.target.closest('[data-qedit]');if(b)openSheet(b.dataset.qedit)});
 $('openFull').addEventListener('click',()=>{S.quick=false;document.body.classList.remove('quick');$('quickhead').hidden=true;renderCapture();syncChrome();render();window.scrollTo(0,0)});
 if(S.quick){document.body.classList.add('quick');$('quickhead').hidden=false;setTimeout(()=>$('cap').focus(),50)}
 renderCapture();syncChrome();render();
-(async()=>{const c=window.claude;if(!c||!c.use){S.err='offline';return render()}
-  c.use('sample').then(async sm=>{if(!sm)return;S.ai=sm;
-    try{const l=await sm.limits();S.tools=!!(l&&l.tools)}catch(e){}
-    renderCapture();syncChrome();render()});
-  const db=await c.use('db');
-  if(!db){S.err='offline';return render()}
+(async()=>{const c=window.claude;let db;
+  if(c&&c.use){S.mode='claude';
+    c.use('sample').then(async sm=>{if(!sm)return;S.ai=sm;
+      try{const l=await sm.limits();S.tools=!!(l&&l.tools)}catch(e){}
+      renderCapture();syncChrome();render()});
+    db=await c.use('db');
+    if(!db){S.err='offline';return render()}}
+  else{S.mode='local';db=localStore();setLocalAI();renderCapture();syncChrome()}
   col=db.collection('items');DB=db;
   db.doc('config/prefs').onSnapshot(s=>{if(s.exists){const d=s.data()||{};S.prefs={name:typeof d.name==='string'?d.name.slice(0,40):'',workStart:/^\d\d:\d\d$/.test(d.workStart)?d.workStart:DEFP.workStart,workEnd:/^\d\d:\d\d$/.test(d.workEnd)?d.workEnd:DEFP.workEnd,workDays:Array.isArray(d.workDays)?d.workDays.filter(x=>Number.isInteger(x)&&x>=0&&x<7):DEFP.workDays.slice()}}if(S.ready)render()},()=>{});
   col.onSnapshot(s=>{S.items=s.docs.map(d=>Object.assign({id:d.id},d.data()));S.ready=true;
