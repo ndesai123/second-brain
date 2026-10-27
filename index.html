@@ -386,7 +386,7 @@ function counts(){const t=today();return{
   note:byKind('note').length,
   project:byKind('project').filter(i=>(i.status||'active')==='active').length,
   link:byKind('link').filter(i=>!i.read).length,
-  work:byKind('work').length}}
+  work:byKind('work').filter(w=>!isFinished(w)).length}}
 const ICONS={
   today:'<rect x="3.5" y="5" width="17" height="15" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/>',
   task:'<rect x="4" y="4" width="16" height="16" rx="3.5"/><path d="m8.5 12 2.5 2.5 4.5-5"/>',
@@ -511,7 +511,7 @@ function taskRow(t){const tdy=today();const p=t.project?get(t.project):null;let 
   return`<div class="row ${fin?'done':''}"><button type="button" class="check" role="checkbox" aria-checked="${fin}" aria-label="Mark done" data-act="toggle" data-id="${t.id}">${fin?checkSvg:''}</button>
   <button type="button" class="main" data-act="edit" data-id="${t.id}"><div class="t">${esc(t.title||domain(t.url)||'Untitled')}</div>${t.body?`<div class="sub">${esc(t.body)}</div>`:''}
   ${due||p||t.remind||origin?`<div class="meta">${origin}${due}${p?`<span class="pill acc">${esc(p.title)}</span>`:''}${remPill(t)}</div>`:''}</button></div>`}
-function remRow(i){return`<div class="row"><button type="button" class="main" data-act="edit" data-id="${i.id}"><div class="domain">${esc(KINDS[i.kind].one)}</div><div class="t">${esc(i.title||domain(i.url)||'Untitled')}</div>${i.body?`<div class="sub">${esc(i.body)}</div>`:''}</button>
+function remRow(i){const fin=isFinished(i);return`<div class="row ${fin?'done':''}"><button type="button" class="check" role="checkbox" aria-checked="${fin}" aria-label="Mark done" data-act="toggle" data-id="${i.id}">${fin?checkSvg:''}</button><button type="button" class="main" data-act="edit" data-id="${i.id}"><div class="domain">${esc(KINDS[i.kind].one)}</div><div class="t">${esc(i.title||domain(i.url)||'Untitled')}</div>${i.body?`<div class="sub">${esc(i.body)}</div>`:''}</button>
   <button type="button" class="iconbtn" data-act="unremind" data-id="${i.id}" aria-label="Dismiss reminder">Got it</button></div>`}
 
 function projectCard(p){const ts=byKind('task').filter(t=>t.project===p.id);const dn=ts.filter(t=>t.done).length;const pct=ts.length?Math.round(dn/ts.length*100):0;
@@ -520,7 +520,7 @@ function projectCard(p){const ts=byKind('task').filter(t=>t.project===p.id);cons
 
 function renderToday(){const open=actionable().filter(t=>!isFinished(t));const t=today();
   const over=open.filter(x=>x.due&&x.due<t).sort(sortDue),tod=open.filter(x=>x.due===t),soon=open.filter(x=>x.due&&x.due>t&&x.due<=addDays(t,3)).sort(sortDue);
-  const pins=byKind('work').filter(w=>w.pinned).sort((a,b)=>(b.updated||0)-(a.updated||0));
+  const pins=byKind('work').filter(w=>w.pinned&&!isFinished(w)).sort((a,b)=>(b.updated||0)-(a.updated||0));
   const projs=byKind('project').filter(p=>(p.status||'active')==='active').sort((a,b)=>(b.updated||0)-(a.updated||0));
   const rems=remindersDue().sort((a,b)=>a.remind<b.remind?-1:1);
   const bits=[];if(tod.length)bits.push(`${tod.length} due today`);if(rems.length)bits.push(`${rems.length} reminder${rems.length>1?'s':''}`);if(over.length)bits.push(`${over.length} overdue`);if(soon.length)bits.push(`${soon.length} coming up`);
@@ -537,7 +537,7 @@ function renderToday(){const open=actionable().filter(t=>!isFinished(t));const t
 async function planDay(){if(S.plan.busy)return;S.plan={text:'',busy:true,err:''};render();
   const t=today();const open=actionable().filter(x=>!isFinished(x)).sort((a,b)=>(a.due||'9999')<(b.due||'9999')?-1:1).slice(0,80)
     .map(x=>({title:x.title,kind:x.kind,due:x.due||'none',project:x.project&&get(x.project)?get(x.project).title:'',notes:String(x.body||'').slice(0,200)}));
-  const pins=byKind('work').filter(w=>w.pinned).map(w=>w.title);
+  const pins=byKind('work').filter(w=>w.pinned&&!isFinished(w)).map(w=>w.title);
   const projs=byKind('project').filter(p=>(p.status||'active')==='active').map(p=>p.title);
   const nowD=new Date(),hm=pad(nowD.getHours())+':'+pad(nowD.getMinutes()),WP=S.prefs,workday=WP.workDays.includes(nowD.getDay());
   const prompt=`Help ${who()} plan the rest of today, ${weekday()} ${t}. It's now ${hm}.
@@ -597,16 +597,16 @@ function renderLinks(){const L=LISTS.find(x=>x[0]===S.linkList)||LISTS[0];const 
   const E={link:['Reading list is empty','Paste any link above to save it for later.'],movie:['No movies yet','Add a movie above.'],show:['No shows yet','Add a TV show above.'],book:['Book list is empty','Add a book above. Auto-sort fills in the author.']}[L[0]];
   return h+(list.length?`<div class="rows">${list.map(linkRow).join('')}</div>`:empty(S.linkView==='read'?`Nothing ${L[3].toLowerCase()} yet`:E[0],E[1]))}
 
-function workRow(w){return`<div class="row"><button type="button" class="main" data-act="edit" data-id="${w.id}"><div class="t">${esc(w.title)}</div>${w.body?`<div class="sub">${esc(w.body)}</div>`:''}
+function workRow(w){const fin=isFinished(w);return`<div class="row ${fin?'done':''}"><button type="button" class="check" role="checkbox" aria-checked="${fin}" aria-label="Mark done" data-act="toggle" data-id="${w.id}">${fin?checkSvg:''}</button><button type="button" class="main" data-act="edit" data-id="${w.id}"><div class="t">${esc(w.title)}</div>${w.body?`<div class="sub">${esc(w.body)}</div>`:''}
   <div class="meta"><span class="pill acc">${esc(w.tag||'Idea')}</span><span class="pill">${esc(fmtStamp(w.created))}</span>${remPill(w)}</div></button>
   <button type="button" class="iconbtn ${w.pinned?'on':''}" data-act="pin" data-id="${w.id}" aria-label="${w.pinned?'Unpin':'Pin'}">${w.pinned?'Pinned':'Pin'}</button></div>`}
 function renderWork(){const all=byKind('work');
   let h=`<div class="filters">${['all',...TAGS].map(t=>`<button type="button" class="chip" data-act="wtag" data-v="${t}" aria-pressed="${S.workTag===t}">${t==='all'?'All':t}</button>`).join('')}</div>`;
   const list=all.filter(w=>S.workTag==='all'||w.tag===S.workTag);
   if(!list.length)return h+empty('Nothing captured yet','Drop work ideas, follow-ups and things to look up here as they come to you.');
-  const pin=list.filter(w=>w.pinned).sort((a,b)=>(b.updated||0)-(a.updated||0));
-  const rest=list.filter(w=>!w.pinned).sort((a,b)=>(b.created||0)-(a.created||0));
-  return h+group('Pinned',pin.map(workRow))+group(pin.length?'Everything else':'Latest',rest.map(workRow))}
+  const pin=list.filter(w=>w.pinned&&!isFinished(w)).sort((a,b)=>(b.updated||0)-(a.updated||0));
+  const rest=list.filter(w=>!w.pinned&&!isFinished(w)).sort((a,b)=>(b.created||0)-(a.created||0));
+  return h+group('Pinned',pin.map(workRow))+group(pin.length?'Everything else':'Latest',rest.map(workRow))+group('Done',list.filter(isFinished).sort((a,b)=>(b.doneAt||0)-(a.doneAt||0)).slice(0,20).map(workRow))}
 
 /* ---------- link titles ---------- */
 const titling=new Set();
