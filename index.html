@@ -322,16 +322,19 @@ async function write(fn,okMsg){if(!col){toast('Open this page in Claude to save 
 /* ---------- Claude helpers ---------- */
 const OFF=['not_granted','sampling_disabled','not_declared','capability_disabled','capability_removed','tools_unavailable'];
 function aiMsg(e){const c=e&&e.code;
-  if(c==='bad_key')return'Your Anthropic API key was rejected. Check it in Settings.';
+  if(c==='bad_key')return'Your AI provider rejected the API key. Check it in Settings.';
+  if(c==='network')return'Couldn’t reach your AI provider. Check the base URL in Settings, and that the provider allows requests from a browser.';
+  if(c==='invalid_request')return'Your AI provider rejected the request. Check the model name in Settings.';
   if(OFF.includes(c))return'Claude isn’t allowed on this page, so the smart features are off. You can turn it on from the page’s Permissions menu.';
-  if(c==='rate_limited')return'You’ve hit a Claude usage limit. Try again in a little while.';
+  if(c==='rate_limited')return`You’ve hit a usage limit with ${AI()==='AI'?'your AI provider':'Claude'}. Try again in a little while.`;
   if(c==='session_expired')return'Sign in to Claude again, then try once more.';
-  if(c==='invalid_json')return'Claude’s answer came back in the wrong shape. Try again.';
-  if(c==='refused')return'Claude couldn’t help with that one. Try rewording it.';
+  if(c==='invalid_json')return'The answer came back in the wrong shape. Try again.';
+  if(c==='refused')return`${AI()} couldn’t help with that one. Try rewording it.`;
   if(c==='prompt_too_large')return'There’s too much saved to send in one go. Try a narrower question.';
-  return'Couldn’t reach Claude. Try again.'}
+  return`Couldn’t reach ${AI()==='AI'?'your AI provider':'Claude'}. Try again.`}
 function aiFail(e){if(OFF.includes(e&&e.code)){S.aiDenied=true;renderCapture();syncChrome()}return aiMsg(e)}
 const aiOn=()=>!!S.ai&&!S.aiDenied;
+const AI=()=>S.mode==='local'&&aiCfgGet().provider!=='anthropic'?'AI':'Claude';
 
 function clean(x){if(!x||typeof x!=='object')return null;const kind=KINDS[x.kind]?x.kind:'note';
   const o={kind,title:String(x.title||'').trim().slice(0,300),body:String(x.body||'').slice(0,5000)};
@@ -414,7 +417,7 @@ function renderCapture(){const smart=aiOn()&&S.smart;const k=capKind();
   let x='';
   if(!smart&&k==='task')x+=`<input type="date" id="capDue" aria-label="Due date">`;
   if(!smart&&k==='work')x+=`<select id="capTag" aria-label="Tag">${TAGS.map(t=>`<option>${t}</option>`).join('')}</select>`;
-  if(aiOn())x+=`<button type="button" class="smart" id="smartTog" aria-pressed="${smart}" title="Let Claude sort what you type into the right section">✦ Auto-sort</button>`;
+  if(aiOn())x+=`<button type="button" class="smart" id="smartTog" aria-pressed="${smart}" title="Let ${AI()} sort what you type into the right section">✦ Auto-sort</button>`;
   $('capExtra').innerHTML=x}
 function syncChrome(){$('capture').hidden=S.tab==='ask'&&!S.q;$('askForm').hidden=S.tab!=='ask'||!!S.q||!aiOn();
   $('askBtn').textContent=S.ctl?'Stop':'Ask'}
@@ -476,7 +479,7 @@ Input:
 """${text.slice(0,8000)}"""`;
   try{const arr=await S.ai.json(prompt,{modelTier:'quick'});
     const items=(Array.isArray(arr)?arr:[arr]).map(parseAction).filter(Boolean).slice(0,25);
-    if(!items.length){toast('Claude couldn’t find anything to file there.');return}
+    if(!items.length){toast(`${AI()} couldn’t find anything to file there.`);return}
     S.pending=items;$('cap').value='';renderPending()}
   catch(e){toast(aiFail(e))}
   finally{S.sorting=false;btn.disabled=false;btn.textContent='Add'}}
@@ -489,7 +492,7 @@ function updRow(p,i){const it=get(p.id);const c=p.changes||{};const del=p.action
   if('pinned' in c)bits.push(c.pinned?'Pin':'Unpin');if('project' in c)bits.push('Change project');if('url' in c)bits.push('Change link');
   return`<div class="row"><span class="kindsel upd">${del?'Delete':'Update'}</span><div class="main"><div class="t">${esc(it?(it.title||domain(it.url)):'Item')}</div>${p.summary?`<div class="sub">${esc(p.summary)}</div>`:''}<div class="meta">${bits.map(b=>`<span class="pill acc">${esc(b)}</span>`).join('')}</div></div><button type="button" class="iconbtn" data-drop="${i}" aria-label="Leave this one out">✕</button></div>`}
 function pendTitle(L){const u=L.filter(p=>p.action!=='create').length,c=L.length-u;const parts=[];
-  if(c)parts.push(`${c} new item${c>1?'s':''}`);if(u)parts.push(`${u} change${u>1?'s':''}`);return'Claude found '+parts.join(' and ')}
+  if(c)parts.push(`${c} new item${c>1?'s':''}`);if(u)parts.push(`${u} change${u>1?'s':''}`);return AI()+' found '+parts.join(' and ')}
 function renderPending(){const P=$('pending');const L=S.pending;
   if(!L||!L.length){S.pending=null;P.hidden=true;P.innerHTML='';return}
   const pt=id=>{const p=get(id);return p?p.title:''};
@@ -536,8 +539,8 @@ function renderToday(){const open=actionable().filter(t=>!isFinished(t));const t
   const bits=[];if(tod.length)bits.push(`${tod.length} due today`);if(rems.length)bits.push(`${rems.length} reminder${rems.length>1?'s':''}`);if(over.length)bits.push(`${over.length} overdue`);if(soon.length)bits.push(`${soon.length} coming up`);
   const lead=bits.length?`You have ${bits.join(', ')}.`:'Nothing is due today.';
   const P=S.plan;
-  let h=(S.mode==='local'&&!S.ai?`<section class="keynote"><p><b>Running in your browser.</b> Your items are saved on this device. Add an Anthropic API key to turn on auto-sort, Plan my day, Ask and auto-fill.</p><button type="button" class="btn sm" data-act="hours">Add key</button></section>`:'')+`<section class="plan"><div class="planhead"><h2>${esc(weekday())}</h2>${aiOn()?`<button type="button" class="btn sm" data-act="plan" ${P.busy?'disabled':''}>${P.busy?'Planning…':P.text?'Re-plan':'✦ Plan my day'}</button>`:''}</div>
-    ${P.text?`<div class="md">${md(P.text)}</div>`:`<p class="lead">${esc(lead)}${aiOn()&&!P.busy?' Claude can turn this into a plan.':''}</p>`}${P.err?`<p class="err">${esc(P.err)}</p>`:''}${aiOn()?`<p class="whrs">Work hours: ${esc(fmtHours())} · <button type="button" class="linkbtn" data-act="hours">Edit</button></p>`:''}</section>`;
+  let h=(S.mode==='local'&&!S.ai?`<section class="keynote"><p><b>Running in your browser.</b> Your items are saved on this device. Connect an AI provider (Anthropic, OpenAI, Gemini, a local model and more) to turn on auto-sort, Plan my day, Ask and auto-fill.</p><button type="button" class="btn sm" data-act="hours">Set up AI</button></section>`:'')+`<section class="plan"><div class="planhead"><h2>${esc(weekday())}</h2>${aiOn()?`<button type="button" class="btn sm" data-act="plan" ${P.busy?'disabled':''}>${P.busy?'Planning…':P.text?'Re-plan':'✦ Plan my day'}</button>`:''}</div>
+    ${P.text?`<div class="md">${md(P.text)}</div>`:`<p class="lead">${esc(lead)}${aiOn()&&!P.busy?' '+AI()+' can turn this into a plan.':''}</p>`}${P.err?`<p class="err">${esc(P.err)}</p>`:''}${aiOn()?`<p class="whrs">Work hours: ${esc(fmtHours())} · <button type="button" class="linkbtn" data-act="hours">Edit</button></p>`:''}</section>`;
   h+=group('Overdue',over.map(taskRow),'alert')+group('Due today',tod.map(taskRow))+group('Reminders',rems.map(remRow))+group('Next 3 days',soon.map(taskRow))
     +group('Pinned work',pins.map(workRow))+suggGroup(3);
   if(projs.length)h+=`<section class="group"><h2>Active projects <span class="count">${projs.length}</span></h2><div class="cards">${projs.slice(0,4).map(projectCard).join('')}</div></section>`;
@@ -642,7 +645,7 @@ async function enrich(id,item){const it=get(id)||item;if(!aiOn()||!it||filling.h
 
 /* ---------- ask ---------- */
 function renderAsk(){
-  if(!S.ai)return S.mode==='local'?`${empty('Ask needs an API key','Add your Anthropic API key in Settings to ask questions about what you’ve saved.')}<div class="filters" style="margin-top:10px;justify-content:center"><button type="button" class="chip" data-act="hours">Open Settings</button></div>`
+  if(!S.ai)return S.mode==='local'?`${empty('Ask needs an AI provider','Connect one in Settings to ask questions about what you’ve saved.')}<div class="filters" style="margin-top:10px;justify-content:center"><button type="button" class="chip" data-act="hours">Open Settings</button></div>`
     :empty('Ask needs Claude','Open this page in the Claude app or on claude.ai to ask questions about what you’ve saved.');
   if(S.aiDenied)return empty('Claude isn’t allowed on this page','Turn it on from this page’s Permissions menu, then reload to use Ask.');
   if(!S.chat.length)return`<div class="askintro"><h2>Ask your brain</h2><p class="muted" style="margin:0">Ask about anything you’ve saved${S.tools?', or tell it to add, reschedule or tick things off. It never deletes anything':''}.</p>
@@ -691,8 +694,8 @@ $('askIn').addEventListener('input',e=>{const t=e.target;t.style.height='';t.sty
 function renderSearch(){const q=S.q.toLowerCase();
   const hits=S.items.filter(i=>[i.title,i.body,i.url,i.tag].some(v=>String(v||'').toLowerCase().includes(q)));
   let h='';
-  if(aiOn())h+=`<div class="filters"><button type="button" class="chip" data-act="ask" data-q="${esc(S.q)}" style="color:var(--accent)">✦ Ask Claude about “${esc(S.q)}”</button></div>`;
-  if(!hits.length)return h+empty('No exact matches','Nothing in any section mentions “'+S.q+'”.'+(aiOn()?' Claude can still look for related items.':''));
+  if(aiOn())h+=`<div class="filters"><button type="button" class="chip" data-act="ask" data-q="${esc(S.q)}" style="color:var(--accent)">✦ Ask ${AI()} about “${esc(S.q)}”</button></div>`;
+  if(!hits.length)return h+empty('No exact matches','Nothing in any section mentions “'+S.q+'”.'+(aiOn()?' '+AI()+' can still look for related items.':''));
   return h+Object.keys(KINDS).map(k=>group(KINDS[k].label,hits.filter(x=>x.kind===k).sort((a,b)=>(b.updated||0)-(a.updated||0)).map(i=>
     `<div class="row ${i.done||i.read?'done':''}"><button type="button" class="main" data-act="edit" data-id="${i.id}"><div class="t">${esc(i.title||domain(i.url)||'Untitled')}</div>${i.body?`<div class="sub">${esc(i.body)}</div>`:''}</button></div>`))).join('')}
 
@@ -743,7 +746,7 @@ $('clearEx').addEventListener('click',async()=>{const ex=S.items.filter(i=>i.exa
 function f(label,html,cls=''){return`<div class="field ${cls}"><label>${label}</label>${html}</div>`}
 function openSheet(id){const it=get(id);if(!it)return;S.editing=id;S.confirmDel=false;
   const k=it.kind;let h=`<h3>Edit ${KINDS[k].one.toLowerCase()}</h3>`;
-  if(aiOn())h+=`<div class="field ai"><label for="e_ai">✦ Change with Claude</label><div class="aibox"><input id="e_ai" placeholder="e.g. due Friday, remind me Thursday" autocomplete="off"><button type="button" class="btn sm" id="e_aiGo">Apply</button></div></div>`;
+  if(aiOn())h+=`<div class="field ai"><label for="e_ai">✦ Change with ${AI()}</label><div class="aibox"><input id="e_ai" placeholder="e.g. due Friday, remind me Thursday" autocomplete="off"><button type="button" class="btn sm" id="e_aiGo">Apply</button></div></div>`;
   const title=(lab='Title')=>f(lab,`<input id="e_title" value="${esc(it.title)}">`);
   if(k==='task'){const ps=byKind('project').filter(p=>p.status!=='done'||p.id===it.project);
     h+=title('Task')+`<div class="inline">${f('Due date',`<input type="date" id="e_due" value="${esc(it.due)}">`)}${f('Remind me on',`<input type="date" id="e_remind" value="${esc(it.remind)}">`)}</div>`
@@ -769,15 +772,14 @@ async function sheetAI(){const it=get(S.editing);const inp=$('e_ai');if(!it||!in
   catch(e){toast(aiFail(e))}finally{btn.disabled=false;btn.textContent='Apply'}}
 $('sheet').addEventListener('keydown',e=>{if(e.target.id==='e_ai'&&e.key==='Enter'&&!e.isComposing){e.preventDefault();sheetAI()}});
 function openHours(){const P=S.prefs;S.editing=null;S.hoursOpen=true;
-  $('sheet').innerHTML=`<h3>Settings</h3>${f('Your name',`<input id="e_name" value="${esc(P.name||'')}" placeholder="So Claude can use it in plans and answers" maxlength="40" autocomplete="given-name">`)}<p class="muted" style="margin:0">Work hours: Plan my day keeps work in these hours and personal things around them.</p>
+  $('sheet').innerHTML=`<h3>Settings</h3>${f('Your name',`<input id="e_name" value="${esc(P.name||'')}" placeholder="So ${AI()} can use it in plans and answers" maxlength="40" autocomplete="given-name">`)}<p class="muted" style="margin:0">Work hours: Plan my day keeps work in these hours and personal things around them.</p>
   <div class="inline">${f('Start',`<input type="time" id="e_ws" value="${esc(P.workStart)}">`)}${f('End',`<input type="time" id="e_we" value="${esc(P.workEnd)}">`)}</div>
   ${f('Workdays',`<div class="days">${[1,2,3,4,5,6,0].map(d=>`<label><input type="checkbox" value="${d}" ${P.workDays.includes(d)?'checked':''}> ${DAYN[d]}</label>`).join('')}</div>`)}
-  ${S.mode==='local'?`<div class="field"><label for="e_key">Anthropic API key</label><input id="e_key" type="password" value="${esc(lsGet(LSK.key,''))}" placeholder="sk-ant-…" autocomplete="off" spellcheck="false">
-    <span class="muted small">Turns on auto-sort, Plan my day, Ask and auto-fill. It’s saved only in this browser and sent only to Anthropic, and usage is billed to your Anthropic account. Get a key at <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noopener">console.anthropic.com</a>.</span></div>
+  ${S.mode==='local'?aiSettingsHTML()+`
   <div class="field"><label>Your data</label><span class="muted small">Saved in this browser only. Export a backup now and then, or to move to another device.</span>
     <div class="inline"><button type="button" class="btn ghost sm" id="e_export">Export</button><label class="btn ghost sm filebtn">Import<input type="file" id="e_import" accept="application/json,.json" hidden></label></div></div>`:''}
   <div class="actions"><span></span><div class="right"><button type="button" class="btn ghost" id="e_cancel">Cancel</button><button type="submit" class="btn">Save</button></div></div>`;
-  $('scrim').hidden=false}
+  $('scrim').hidden=false;aiSettingsSync()}
 function exportData(){if(!DB||!DB.exportAll)return;const blob=new Blob([JSON.stringify(DB.exportAll(),null,2)],{type:'application/json'});
   const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='second-brain-'+today()+'.json';document.body.appendChild(a);a.click();
   setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},1000);toast('Exported')}
@@ -799,8 +801,8 @@ $('sheet').addEventListener('submit',async e=>{e.preventDefault();
     const days=[...$('sheet').querySelectorAll('.days input:checked')].map(x=>+x.value);
     if(ws>=we){toast('End time needs to be after the start time.');return}
     const p={name:($('e_name').value||'').trim().slice(0,40),workStart:ws,workEnd:we,workDays:days};
-    const keyVal=$('e_key')?$('e_key').value.trim():null;closeSheet();
-    if(keyVal!==null){try{localStorage.setItem(LSK.key,JSON.stringify(keyVal))}catch(x){}setLocalAI();renderCapture();syncChrome()}
+    const aiCfg=$('e_prov')?{provider:$('e_prov').value,key:$('e_key').value.trim(),baseUrl:$('e_base').value.trim(),model:$('e_model').value.trim(),quick:$('e_quick').value.trim()}:null;closeSheet();
+    if(aiCfg){try{localStorage.setItem(LSK.ai,JSON.stringify(aiCfg));localStorage.removeItem(LSK.key)}catch(x){}setLocalAI();renderCapture();syncChrome()}
     if(!DB){toast('Open this page in Claude to save changes.');return}
     try{await DB.doc('config/prefs').set(p);S.prefs=p;render();toast('Settings saved')}catch(x){toast(errMsg(x))}
     return}
@@ -811,8 +813,8 @@ $('sheet').addEventListener('submit',async e=>{e.preventDefault();
   if($('e_url')){let x=v('e_url').trim();if(x&&!/^https?:\/\//i.test(x))x='https://'+x;u.url=x}
   const id=S.editing;closeSheet();write(()=>col.doc(id).update(u),'Saved')});
 
-/* ---------- standalone mode: browser storage + your own Anthropic API key ---------- */
-const LSK={items:'sb-items',prefs:'sb-prefs',key:'sb-api-key'};
+/* ---------- standalone mode: browser storage + your own AI provider ---------- */
+const LSK={items:'sb-items',prefs:'sb-prefs',key:'sb-api-key',ai:'sb-ai'};
 const lsGet=(k,d)=>{try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}};
 function lsSet(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){throw{code:'quota_exceeded'}}}
 function localStore(){let items=lsGet(LSK.items,{})||{};const subs=new Set(),psubs=new Set();
@@ -837,38 +839,73 @@ function parseJsonLoose(t){t=String(t||'').trim();try{return JSON.parse(t)}catch
   const f=t.match(/```(?:json)?\s*([\s\S]*?)```/);if(f){try{return JSON.parse(f[1])}catch(e){}}
   const a=Math.min(...['[','{'].map(c=>{const i=t.indexOf(c);return i<0?Infinity:i})),b=Math.max(t.lastIndexOf(']'),t.lastIndexOf('}'));
   if(a<b)return JSON.parse(t.slice(a,b+1));throw new Error('No JSON')}
-const API_MODELS={quick:'claude-haiku-5-5',default:'claude-sonnet-5-5',complex:'claude-opus-5-5'};
-function apiSampler(key){
+/* AI providers. 'anthropic' speaks the Messages API; everything else speaks the OpenAI-style
+   /chat/completions API, which most providers and local servers offer. Model names are editable defaults. */
+const PROVIDERS={
+  anthropic:{label:'Anthropic (Claude)',api:'anthropic',base:'https://api.anthropic.com/v1',model:'claude-sonnet-5-5',quick:'claude-haiku-5-5',keyUrl:'https://console.anthropic.com/settings/keys'},
+  openai:{label:'OpenAI',api:'openai',base:'https://api.openai.com/v1',model:'gpt-4.1',quick:'gpt-4.1-mini',keyUrl:'https://platform.openai.com/api-keys'},
+  gemini:{label:'Google Gemini',api:'openai',base:'https://generativelanguage.googleapis.com/v1beta/openai',model:'gemini-2.5-flash',quick:'gemini-2.5-flash-lite',keyUrl:'https://aistudio.google.com/apikey'},
+  openrouter:{label:'OpenRouter (many models)',api:'openai',base:'https://openrouter.ai/api/v1',model:'openai/gpt-4.1',quick:'openai/gpt-4.1-mini',keyUrl:'https://openrouter.ai/keys'},
+  groq:{label:'Groq',api:'openai',base:'https://api.groq.com/openai/v1',model:'llama-3.3-70b-versatile',quick:'llama-3.1-8b-instant',keyUrl:'https://console.groq.com/keys'},
+  ollama:{label:'Ollama (on your computer)',api:'openai',base:'http://localhost:11434/v1',model:'llama3.1',quick:'llama3.1',noKey:true},
+  custom:{label:'Other (OpenAI-compatible)',api:'openai',base:'',model:'',quick:''}};
+const aiCfgGet=()=>{const c=lsGet(LSK.ai,null);if(c&&PROVIDERS[c.provider])return c;const k=lsGet(LSK.key,'');return k?{provider:'anthropic',key:k}:{provider:'anthropic',key:''}};
+const aiReady=c=>{const P=PROVIDERS[c.provider];return !!P&&(!!c.key||!!P.noKey||c.provider==='custom')&&!!(c.baseUrl||P.base)&&!!(c.model||P.model)};
+function aiSettingsHTML(){const c=aiCfgGet(),P=PROVIDERS[c.provider];
+  return`<div class="field"><label for="e_prov">AI provider</label><select id="e_prov">${Object.entries(PROVIDERS).map(([k,p])=>`<option value="${k}" ${k===c.provider?'selected':''}>${esc(p.label)}</option>`).join('')}</select></div>
+  <div class="field"><label for="e_key">API key</label><input id="e_key" type="password" value="${esc(c.key||'')}" autocomplete="off" spellcheck="false">
+    <span class="muted small" id="e_keyhelp"></span></div>
+  <div class="inline">${f('Model',`<input id="e_model" value="${esc(c.model||'')}" placeholder="${esc(P.model)}" spellcheck="false">`)}${f('Quick model',`<input id="e_quick" value="${esc(c.quick||'')}" placeholder="${esc(P.quick)}" spellcheck="false">`)}</div>
+  ${f('Base URL',`<input id="e_base" value="${esc(c.baseUrl||'')}" placeholder="${esc(P.base||'https://…/v1')}" inputmode="url" spellcheck="false">`)}
+  <p class="muted small" style="margin:-4px 0 0">Turns on auto-sort, Plan my day, Ask and auto-fill. The quick model handles small jobs like sorting. Leave a field blank to use the default shown. Your key is saved only in this browser and sent only to the provider, and usage is billed to your account with them.</p>`}
+function aiSettingsSync(){const sel=$('e_prov');if(!sel)return;const P=PROVIDERS[sel.value];
+  $('e_model').placeholder=P.model||'model name';$('e_quick').placeholder=P.quick||'same as Model';$('e_base').placeholder=P.base||'https://…/v1';
+  $('e_key').placeholder=P.noKey?'Not needed':'Paste your key';
+  $('e_keyhelp').innerHTML=P.noKey?'Runs on your computer. Start Ollama with <code>OLLAMA_ORIGINS=*</code> so this page can reach it.':P.keyUrl?`Get a key at <a href="${P.keyUrl}" target="_blank" rel="noopener">${esc(domain(P.keyUrl))}</a>.`:'Use the key and base URL from your provider. It must accept requests from a browser.'}
+$('sheet').addEventListener('change',e=>{if(e.target.id==='e_prov'){$('e_model').value='';$('e_quick').value='';$('e_base').value='';aiSettingsSync()}});
+function makeSampler(c){const P=PROVIDERS[c.provider]||PROVIDERS.custom;const base=(c.baseUrl||P.base).replace(/\/+$/,'');
+  const models={quick:c.quick||P.quick||c.model||P.model,default:c.model||P.model,complex:c.model||P.model};
+  async function post(path,headers,body,signal){let r;
+    try{r=await fetch(base+path,{method:'POST',signal,headers:{'content-type':'application/json',...headers},body:JSON.stringify(body)})}
+    catch(e){throw{code:e&&e.name==='AbortError'?'cancelled':'network'}}
+    if(!r.ok){let msg='';try{const j=await r.json();msg=j.error&&(j.error.message||j.error)||''}catch(e){}
+      throw{code:r.status===401||r.status===403?'bad_key':r.status===429?'rate_limited':r.status===400||r.status===404||r.status===422?'invalid_request':'upstream_error',message:String(msg)}}
+    return r.json()}
+  const ANTH={async step(msgs,tools,model,signal){const body={model,max_tokens:2048,messages:msgs};
+      if(tools)body.tools=tools.map(t=>({name:t.name,description:t.description,input_schema:t.inputSchema||{type:'object',properties:{}}}));
+      const j=await post('/messages',{'x-api-key':c.key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body,signal);const parts=j.content||[];
+      return{text:parts.filter(p=>p.type==='text').map(p=>p.text).join(''),calls:parts.filter(p=>p.type==='tool_use').map(p=>({id:p.id,name:p.name,input:p.input||{}})),
+        wants:j.stop_reason==='tool_use',truncated:j.stop_reason==='max_tokens',assistant:{role:'assistant',content:parts}}},
+    results:rs=>[{role:'user',content:rs.map(r=>({type:'tool_result',tool_use_id:r.id,content:r.content,is_error:r.err}))}]};
+  const OAI={async step(msgs,tools,model,signal){const body={model,messages:msgs};
+      if(tools)body.tools=tools.map(t=>({type:'function',function:{name:t.name,description:t.description,parameters:t.inputSchema||{type:'object',properties:{}}}}));
+      const j=await post('/chat/completions',c.key?{authorization:'Bearer '+c.key}:{},body,signal);const ch=(j.choices||[])[0]||{},m=ch.message||{};
+      const calls=(m.tool_calls||[]).map(tc=>{let input={};try{input=JSON.parse(tc.function&&tc.function.arguments||'{}')}catch(e){}return{id:tc.id,name:tc.function&&tc.function.name,input}});
+      const text=typeof m.content==='string'?m.content:Array.isArray(m.content)?m.content.map(x=>x&&x.text||'').join(''):'';
+      return{text,calls,wants:calls.length>0,truncated:ch.finish_reason==='length',assistant:{role:'assistant',content:m.content||'',...(m.tool_calls?{tool_calls:m.tool_calls}:{})}}},
+    results:rs=>rs.map(r=>({role:'tool',tool_call_id:r.id,content:r.content}))};
+  const X=P.api==='anthropic'?ANTH:OAI;
   async function call(input,opts={}){
     const turns=typeof input==='string'?[{role:'user',content:input}]:input;const messages=[];
     for(const m of turns){const last=messages[messages.length-1];if(last&&last.role===m.role)last.content+='\n\n'+m.content;else messages.push({role:m.role,content:String(m.content)})}
-    const tools=Array.isArray(opts.tools)&&opts.tools.length?opts.tools:null;const model=API_MODELS[opts.modelTier]||API_MODELS.default;let text='';
+    const tools=Array.isArray(opts.tools)&&opts.tools.length?opts.tools:null;const model=models[opts.modelTier]||models.default;let text='';
     for(let round=0;round<6;round++){
-      const body={model,max_tokens:2048,messages};
-      if(tools)body.tools=tools.map(t=>({name:t.name,description:t.description,input_schema:t.inputSchema||{type:'object',properties:{}}}));
-      let r;try{r=await fetch('https://api.anthropic.com/v1/messages',{method:'POST',signal:opts.signal,
-        headers:{'content-type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},body:JSON.stringify(body)})}
-      catch(e){throw{code:e&&e.name==='AbortError'?'cancelled':'upstream_error',text}}
-      if(!r.ok){let msg='';try{msg=(await r.json()).error.message}catch(e){}
-        throw{code:r.status===401||r.status===403?'bad_key':r.status===429?'rate_limited':r.status===400?'invalid_request':'upstream_error',message:msg,text}}
-      const j=await r.json();const parts=j.content||[];
-      const t=parts.filter(p=>p.type==='text').map(p=>p.text).join('');
-      if(t){text+=(text?'\n\n':'')+t;if(opts.onText)try{opts.onText({text,delta:t})}catch(e){}}
-      const uses=parts.filter(p=>p.type==='tool_use');
-      if(!tools||j.stop_reason!=='tool_use'||!uses.length){if(!text)throw{code:'empty_completion'};return{text,truncated:j.stop_reason==='max_tokens',modelTierApplied:opts.modelTier||'default'}}
-      messages.push({role:'assistant',content:parts});const results=[];
-      for(const u of uses){const tool=tools.find(x=>x.name===u.name);let out,err=false;
+      let s;try{s=await X.step(messages,tools,model,opts.signal)}catch(e){throw{...e,text}}
+      if(s.text){text+=(text?'\n\n':'')+s.text;if(opts.onText)try{opts.onText({text,delta:s.text})}catch(e){}}
+      if(!tools||!s.wants||!s.calls.length){if(!text)throw{code:'empty_completion'};return{text,truncated:s.truncated,modelTierApplied:opts.modelTier||'default'}}
+      messages.push(s.assistant);const results=[];
+      for(const u of s.calls){const tool=tools.find(x=>x.name===u.name);let out,err=false;
         try{if(!tool)throw new Error('Unknown tool');out=await tool.execute(u.input||{},{signal:opts.signal||new AbortController().signal})}
         catch(e){out='Error: '+(e&&e.message||e);err=true}
-        results.push({type:'tool_result',tool_use_id:u.id,content:typeof out==='string'?out:JSON.stringify(out),is_error:err})}
-      messages.push({role:'user',content:results})}
+        results.push({id:u.id,content:typeof out==='string'?out:JSON.stringify(out),err})}
+      messages.push(...X.results(results))}
     return{text,truncated:true,modelTierApplied:opts.modelTier||'default'}}
   const sample=(i,o)=>call(i,o);
   sample.json=async(i,o)=>{const inp=typeof i==='string'?i+'\n\nReply with only the JSON value, no other text.':i;const r=await call(inp,o);
     try{return parseJsonLoose(r.text)}catch(e){throw{code:'invalid_json',text:r.text}}};
   sample.limits=async()=>({maxPromptBytes:262144,tools:{maxCount:16}});
   return sample}
-function setLocalAI(){const k=lsGet(LSK.key,'');S.ai=k?apiSampler(k):null;S.tools=!!k;S.aiDenied=false}
+function setLocalAI(){const c=aiCfgGet();const ok=aiReady(c);S.ai=ok?makeSampler(c):null;S.tools=ok;S.aiDenied=false}
 
 /* ---------- boot ---------- */
 $('quickRecent').addEventListener('click',e=>{const b=e.target.closest('[data-qedit]');if(b)openSheet(b.dataset.qedit)});
