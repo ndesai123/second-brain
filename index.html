@@ -1,7 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="description" content="A personal second brain for tasks, notes, projects and a library of links, movies, shows and books, with AI that files, updates and plans around what you save.">
+<meta name="theme-color" content="#eef1f6" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0e131b" media="(prefers-color-scheme: dark)">
 <title>Second Brain</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Atkinson+Hyperlegible:wght@400;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Base reset. Claude artifacts add the same rules automatically; they're here so the page also works on its own. */
+:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif}
+img{max-width:100%}
+[hidden]:not([hidden=until-found i]){display:none!important}
+</style>
+</head>
+<body>
 <style>
 /* Layout: one narrow working column; sticky header with search + tabs, a capture bar that Claude can auto-sort, records grouped by when they need attention */
 :root{
@@ -544,7 +562,7 @@ function renderToday(){const open=actionable().filter(t=>!isFinished(t));const t
   h+=group('Overdue',over.map(taskRow),'alert')+group('Due today',tod.map(taskRow))+group('Reminders',rems.map(remRow))+group('Next 3 days',soon.map(taskRow))
     +group('Pinned work',pins.map(workRow))+suggGroup(3);
   if(projs.length)h+=`<section class="group"><h2>Active projects <span class="count">${projs.length}</span></h2><div class="cards">${projs.slice(0,4).map(projectCard).join('')}</div></section>`;
-  if(!over.length&&!tod.length&&!rems.length&&!soon.length&&!pins.length&&!projs.length)h+=`<div class="group">${empty('A clear day','Type anything above and Claude will file it. Dated tasks and pinned work notes show up here.')}</div>`;
+  if(!over.length&&!tod.length&&!rems.length&&!soon.length&&!pins.length&&!projs.length)h+=`<div class="group">${empty('A clear day',(aiOn()?`Type anything above and ${AI()} will file it. `:'Add anything above. ')+'Dated tasks and pinned work notes show up here.')}</div>`;
   return h}
 
 async function planDay(){if(S.plan.busy)return;S.plan={text:'',busy:true,err:''};render();
@@ -927,4 +945,5 @@ renderCapture();syncChrome();render();
       if(S.editing&&!get(S.editing))closeSheet()},
     e=>{S.err=e.code||'error';render()})})();
 </script>
-
+</body>
+</html>
